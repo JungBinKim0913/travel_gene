@@ -76,6 +76,7 @@ class TravelPlannerAgent:
                 conversation_state = {
                     "destination": None,
                     "travel_dates": None,
+                    "duration": None,
                     "preferences": [],
                     "details_collected": False,
                     "last_topic": None,
@@ -104,12 +105,14 @@ class TravelPlannerAgent:
             2. 추측이나 가정은 절대 하지 않음
             3. 아래 형식을 정확히 준수
             4. 한글이 아닌 정확한 JSON 키 사용
+            5. 여행 기간은 구체적인 날짜가 없더라도 "2박 3일"과 같은 형식도 인식
 
             응답 형식 (이 형식을 정확히 따라야 함):
             {
                 "core_info": {
                     "destination": "목적지명 또는 null",
                     "dates": "여행날짜 또는 null",
+                    "duration": "숙박일수 (예: 2) 또는 null",
                     "preferences": ["선호도1", "선호도2"]
                 },
                 "context": {
@@ -121,40 +124,6 @@ class TravelPlannerAgent:
                     "required_info": ["필요정보1", "필요정보2"],
                     "suggested_questions": ["질문1", "질문2"],
                     "recommendations": ["제안1", "제안2"]
-                }
-            }
-
-            주의사항:
-            - 반드시 위 JSON 형식만 사용
-            - 다른 설명이나 부가 텍스트 절대 추가하지 않음
-            - 모든 키는 영문으로 정확히 사용 (core_info, context, next_steps 등)
-            - true/false는 소문자로 사용
-            - 알 수 없는 정보는 null 또는 빈 배열([]) 사용
-            - 배열은 항상 유효한 값만 포함
-
-            잘못된 응답 예시:
-            {
-                "핵심정보": {  // (X) 한글 키 사용
-                "목적지": "서울",  // (X) 한글 키 사용
-                }
-            }
-
-            올바른 응답 예시:
-            {
-                "core_info": {
-                    "destination": "서울",
-                    "dates": null,
-                    "preferences": ["관광", "맛집"]
-                },
-                "context": {
-                    "current_topic": "여행지 선택",
-                    "related_to_previous": true,
-                    "user_interests": ["도시 관광", "현지 음식"]
-                },
-                "next_steps": {
-                    "required_info": ["여행 날짜"],
-                    "suggested_questions": ["언제 여행을 계획하시나요?"],
-                    "recommendations": ["서울 시내 관광", "현지 맛집 탐방"]
                 }
             }""")
             
@@ -169,6 +138,9 @@ class TravelPlannerAgent:
                     conversation_state["destination"] = destination
                 if dates := analysis_result["core_info"].get("dates"):
                     conversation_state["travel_dates"] = dates
+                if duration := analysis_result["core_info"].get("duration"):
+                    conversation_state["duration"] = duration
+                    conversation_state["confirmed_info"].add("travel_dates")
                 if preferences := analysis_result["core_info"].get("preferences"):
                     current_preferences = set(conversation_state.get("preferences", []))
                     current_preferences.update(preferences)
@@ -205,18 +177,20 @@ class TravelPlannerAgent:
                     conversation_state["interaction_history"]
                 )
                 if next_question:
-                    response_prompt = SystemMessage(content=f"""현재까지 파악된 정보를 바탕으로 자연스럽게 대화를 이어가주세요.
-                    
-                    다음 정보가 필요합니다: {next_question}
-                    
-                    대화 스타일:
-                    1. 친근하고 자연스러운 어조 유지
-                    2. 이전 대화 내용을 참고하여 맥락 유지
-                    3. 열린 질문으로 시작하여 사용자의 선호도를 자세히 파악
-                    4. 적절한 예시나 추천사항 포함
-                    5. 한 번에 너무 많은 것을 물어보지 않기""")
-                    
-                    messages.append(response_prompt)
+                    if not any(info in next_question.lower() for info in conversation_state["confirmed_info"]):
+                        response_prompt = SystemMessage(content=f"""현재까지 파악된 정보를 바탕으로 자연스럽게 대화를 이어가주세요.
+                        
+                        다음 정보가 필요합니다: {next_question}
+                        
+                        대화 스타일:
+                        1. 친근하고 자연스러운 어조 유지
+                        2. 이전 대화 내용을 참고하여 맥락 유지
+                        3. 열린 질문으로 시작하여 사용자의 선호도를 자세히 파악
+                        4. 적절한 예시나 추천사항 포함
+                        5. 한 번에 너무 많은 것을 물어보지 않기
+                        6. 이미 알고 있는 정보는 다시 물어보지 않기""")
+                        
+                        messages.append(response_prompt)
             
             response = self.llm.invoke(messages)
             messages.append(response)
@@ -303,10 +277,12 @@ class TravelPlannerAgent:
         context_parts = []
         if destination := conversation_state.get("destination"):
             context_parts.append(f"목적지: {destination}")
-        if preferences := conversation_state.get("preferences"):
-            context_parts.append(f"선호도: {', '.join(preferences)}")
         if travel_dates := conversation_state.get("travel_dates"):
             context_parts.append(f"여행 기간: {travel_dates}")
+        elif duration := conversation_state.get("duration"):
+            context_parts.append(f"여행 기간: {duration}박 {duration+1}일")
+        if preferences := conversation_state.get("preferences"):
+            context_parts.append(f"선호도: {', '.join(preferences)}")
             
         if context_parts:
             context_msg = """여행 계획을 도와드리는 AI 어시스턴트입니다.
