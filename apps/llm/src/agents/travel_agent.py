@@ -98,7 +98,8 @@ class TravelPlannerAgent:
                 5. 교통편 안내"""))
             
             last_messages = messages[-3:] if len(messages) >= 3 else messages
-            analysis_prompt = SystemMessage(content="""당신은 여행 대화 분석 전문가입니다. 주어진 대화 내용을 분석하여 정확히 아래 JSON 형식으로만 응답해야 합니다.
+            current_year = datetime.now().year
+            analysis_prompt = SystemMessage(content=f"""당신은 여행 대화 분석 전문가입니다. 주어진 대화 내용을 분석하여 정확히 아래 JSON 형식으로만 응답해야 합니다.
 
             당신의 임무:
             1. 대화에서 명시적으로 언급된 정보만 추출
@@ -106,26 +107,45 @@ class TravelPlannerAgent:
             3. 아래 형식을 정확히 준수
             4. 한글이 아닌 정확한 JSON 키 사용
             5. 여행 기간은 구체적인 날짜가 없더라도 "2박 3일"과 같은 형식도 인식
+            6. 날짜 처리 시 다음 규칙을 따를 것:
+               - 연도가 없는 경우 현재 연도({current_year}) 사용
+               - 날짜가 있는 경우 반드시 요일을 확인하고 포함
+               - 날짜 형식은 "YYYY년 MM월 DD일 (요일)" 형식으로 통일
+               - 다양한 날짜 표현을 이해하고 처리 (예: "이번 주 토요일", "다음 달 초", "크리스마스")
+               - 잘못된 날짜나 요일 조합이 있는 경우 올바른 정보로 수정
 
             응답 형식 (이 형식을 정확히 따라야 함):
-            {
-                "core_info": {
+            {{
+                "core_info": {{
                     "destination": "목적지명 또는 null",
-                    "dates": "여행날짜 또는 null",
+                    "dates": "여행날짜 또는 null (형식: YYYY년 MM월 DD일 (요일))",
                     "duration": "숙박일수 (예: 2) 또는 null",
+                    "date_validation": {{
+                        "is_valid": true/false,
+                        "original": "원본 날짜 표현",
+                        "corrected": "수정된 날짜 (필요한 경우)"
+                    }},
                     "preferences": ["선호도1", "선호도2"]
-                },
-                "context": {
+                }},
+                "context": {{
                     "current_topic": "현재 주제",
                     "related_to_previous": true,
                     "user_interests": ["관심사1", "관심사2"]
-                },
-                "next_steps": {
+                }},
+                "next_steps": {{
                     "required_info": ["필요정보1", "필요정보2"],
                     "suggested_questions": ["질문1", "질문2"],
                     "recommendations": ["제안1", "제안2"]
-                }
-            }""")
+                }}
+            }}
+
+            날짜 처리 예시:
+            1. "다음 주 토요일" -> "{current_year}년 MM월 DD일 (토)"
+            2. "크리스마스" -> "{current_year}년 12월 25일 (수)"
+            3. "6월 7일" -> "{current_year}년 6월 7일 (금)"
+            
+            잘못된 날짜/요일 조합 예시:
+            입력: "{current_year}년 6월 7일 (토)" -> 수정: "{current_year}년 6월 7일 (금)" (실제 요일로 수정)""")
             
             analysis_messages = [analysis_prompt, *last_messages]
             analysis_response = self.llm.invoke(analysis_messages)
@@ -136,11 +156,18 @@ class TravelPlannerAgent:
                 
                 if destination := analysis_result["core_info"].get("destination"):
                     conversation_state["destination"] = destination
-                if dates := analysis_result["core_info"].get("dates"):
-                    conversation_state["travel_dates"] = dates
+                
+                if date_info := analysis_result["core_info"].get("date_validation"):
+                    if not date_info["is_valid"] and date_info.get("corrected"):
+                        # 잘못된 날짜/요일 조합이 있는 경우 수정된 정보 사용
+                        conversation_state["travel_dates"] = date_info["corrected"]
+                    elif dates := analysis_result["core_info"].get("dates"):
+                        conversation_state["travel_dates"] = dates
+                
                 if duration := analysis_result["core_info"].get("duration"):
                     conversation_state["duration"] = duration
                     conversation_state["confirmed_info"].add("travel_dates")
+                
                 if preferences := analysis_result["core_info"].get("preferences"):
                     current_preferences = set(conversation_state.get("preferences", []))
                     current_preferences.update(preferences)
