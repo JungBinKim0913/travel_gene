@@ -235,13 +235,17 @@ class TravelPlannerAgent:
             has_preferences = bool(conversation_state.get("preferences"))
             
             recent_messages = messages[-3:] if len(messages) >= 3 else messages
-            plan_keywords = ["계획", "일정", "스케줄", "플랜"]
+            plan_keywords = ["계획", "일정", "스케줄", "플랜", "짜줘"]
             
             for msg in recent_messages:
                 if isinstance(msg, HumanMessage):
                     content = msg.content.lower()
                     if any(keyword in content for keyword in plan_keywords):
-                        if has_destination or has_dates or has_preferences:
+                        if has_destination and has_dates and has_preferences:
+                            return "generate"
+                    
+                    if ("그대로" in content or "이대로" in content) and any(keyword in content for keyword in ["계획", "진행", "시작"]):
+                        if has_destination and has_dates and has_preferences:
                             return "generate"
             
             if not has_destination:
@@ -253,7 +257,7 @@ class TravelPlannerAgent:
             if not has_preferences:
                 return "collect_details"
             
-            return "generate"
+            return "understand_request"
             
         except Exception as e:
             print(f"Error in _determine_next_step: {str(e)}")
