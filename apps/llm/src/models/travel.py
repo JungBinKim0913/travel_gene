@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -12,4 +12,4 @@ class ChatMessage(BaseModel):
     """채팅 메시지"""
     role: str = Field(..., description="메시지 작성자 역할 (system, user, assistant)")
     content: str = Field(..., description="메시지 내용")
-    timestamp: datetime = Field(default_factory=datetime.now, description="메시지 작성 시간") 
+    timestamp: Optional[Union[datetime, str]] = Field(default_factory=lambda: datetime.now().isoformat(), description="메시지 작성 시간") 
