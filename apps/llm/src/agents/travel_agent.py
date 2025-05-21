@@ -4,6 +4,18 @@ from langgraph.graph import StateGraph, END
 from langgraph.store.memory import InMemoryStore
 from langchain.schema import SystemMessage
 from datetime import datetime
+from enum import Enum, auto
+
+class ConversationState(Enum):
+    UNDERSTAND_REQUEST = auto()
+    ASK_DESTINATION = auto()
+    COLLECT_DETAILS = auto()
+    GENERATE_PLAN = auto()
+    REFINE_PLAN = auto()
+    END = auto()
+
+    def __str__(self):
+        return self.name
 
 class TravelPlannerState(TypedDict):
     messages: List[BaseMessage]
@@ -27,30 +39,30 @@ class TravelPlannerAgent:
         """대화 워크플로우 생성"""
         workflow = StateGraph(TravelPlannerState)
         
-        workflow.add_node("understand_request", self._understand_request)
-        workflow.add_node("generate_plan", self._generate_plan)
-        workflow.add_node("refine_plan", self._refine_plan)
-        workflow.add_node("ask_destination", self._ask_destination)
-        workflow.add_node("collect_details", self._collect_details)
+        workflow.add_node(str(ConversationState.UNDERSTAND_REQUEST), self._understand_request)
+        workflow.add_node(str(ConversationState.GENERATE_PLAN), self._generate_plan)
+        workflow.add_node(str(ConversationState.REFINE_PLAN), self._refine_plan)
+        workflow.add_node(str(ConversationState.ASK_DESTINATION), self._ask_destination)
+        workflow.add_node(str(ConversationState.COLLECT_DETAILS), self._collect_details)
         
-        workflow.set_entry_point("understand_request")
+        workflow.set_entry_point(str(ConversationState.UNDERSTAND_REQUEST))
 
         workflow.add_conditional_edges(
-            "understand_request",
+            str(ConversationState.UNDERSTAND_REQUEST),
             self._determine_next_step,
             {
-                "ask_destination": "ask_destination",
-                "collect_details": "collect_details",
-                "generate": "generate_plan",
-                "refine": "refine_plan",
-                "end": END
+                str(ConversationState.ASK_DESTINATION): str(ConversationState.ASK_DESTINATION),
+                str(ConversationState.COLLECT_DETAILS): str(ConversationState.COLLECT_DETAILS),
+                str(ConversationState.GENERATE_PLAN): str(ConversationState.GENERATE_PLAN),
+                str(ConversationState.REFINE_PLAN): str(ConversationState.REFINE_PLAN),
+                str(ConversationState.END): END
             }
         )
         
-        workflow.add_edge("ask_destination", END)
-        workflow.add_edge("collect_details", END)
-        workflow.add_edge("generate_plan", END)
-        workflow.add_edge("refine_plan", END)
+        workflow.add_edge(str(ConversationState.ASK_DESTINATION), END)
+        workflow.add_edge(str(ConversationState.COLLECT_DETAILS), END)
+        workflow.add_edge(str(ConversationState.GENERATE_PLAN), END)
+        workflow.add_edge(str(ConversationState.REFINE_PLAN), END)
         
         return workflow
 
@@ -212,7 +224,7 @@ class TravelPlannerAgent:
             return {
                 **state,
                 "messages": messages,
-                "current_step": "understand_request",
+                "current_step": str(ConversationState.UNDERSTAND_REQUEST),
                 "conversation_state": conversation_state
             }
         except Exception as e:
@@ -220,7 +232,7 @@ class TravelPlannerAgent:
             return {
                 **state,
                 "messages": messages if 'messages' in locals() else [],
-                "current_step": "understand_request",
+                "current_step": str(ConversationState.UNDERSTAND_REQUEST),
                 "conversation_state": conversation_state if 'conversation_state' in locals() else {}
             }
         
@@ -242,26 +254,26 @@ class TravelPlannerAgent:
                     content = msg.content.lower()
                     if any(keyword in content for keyword in plan_keywords):
                         if has_destination and has_dates and has_preferences:
-                            return "generate"
+                            return str(ConversationState.GENERATE_PLAN)
                     
                     if ("그대로" in content or "이대로" in content) and any(keyword in content for keyword in ["계획", "진행", "시작"]):
                         if has_destination and has_dates and has_preferences:
-                            return "generate"
+                            return str(ConversationState.GENERATE_PLAN)
             
             if not has_destination:
-                return "ask_destination"
+                return str(ConversationState.ASK_DESTINATION)
             
             if not has_dates:
-                return "collect_details"
+                return str(ConversationState.COLLECT_DETAILS)
             
             if not has_preferences:
-                return "collect_details"
+                return str(ConversationState.COLLECT_DETAILS)
             
-            return "understand_request"
+            return str(ConversationState.UNDERSTAND_REQUEST)
             
         except Exception as e:
             print(f"Error in _determine_next_step: {str(e)}")
-            return "end"
+            return str(ConversationState.END)
 
     def _select_next_question(self, pending_questions: List[str], last_topic: str, interaction_history: List[Dict]) -> Optional[str]:
         """다음에 물어볼 질문 선택"""
@@ -401,7 +413,7 @@ class TravelPlannerAgent:
         return {
             **state,
             "messages": messages,
-            "current_step": "ask_destination",
+            "current_step": str(ConversationState.ASK_DESTINATION),
             "conversation_state": {
                 **conversation_state,
                 "preferences": previous_preferences
@@ -433,7 +445,7 @@ class TravelPlannerAgent:
         return {
             **state,
             "messages": messages,
-            "current_step": "collect_details",
+            "current_step": str(ConversationState.COLLECT_DETAILS),
             "conversation_state": conversation_state
         }
 
@@ -482,7 +494,7 @@ class TravelPlannerAgent:
         return {
             **state,
             "messages": messages,
-            "current_step": "generate_plan",
+            "current_step": str(ConversationState.GENERATE_PLAN),
             "plan_data": {
                 "generated_at": "generate_plan",
                 "content": response.content,
@@ -504,7 +516,7 @@ class TravelPlannerAgent:
         return {
             **state,
             "messages": messages,
-            "current_step": "refine_plan",
+            "current_step": str(ConversationState.REFINE_PLAN),
             "plan_data": {
                 "generated_at": "refine_plan",
                 "content": response.content,
@@ -544,7 +556,7 @@ class TravelPlannerAgent:
             
             initial_state = {
                 "messages": base_messages,
-                "current_step": "understand_request",
+                "current_step": str(ConversationState.UNDERSTAND_REQUEST),
                 "plan_data": {},
                 "required_info": {},
                 "conversation_state": {}
