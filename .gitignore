@@ -35,3 +35,7 @@ ENV/
 
 # Logs
 *.log 
+
+# Google Calendar API
+credentials.json
+token.json
