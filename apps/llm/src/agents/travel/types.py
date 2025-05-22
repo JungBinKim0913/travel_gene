@@ -8,6 +8,7 @@ class ConversationState(Enum):
     COLLECT_DETAILS = auto()
     GENERATE_PLAN = auto()
     REFINE_PLAN = auto()
+    REGISTER_CALENDAR = auto()
     END = auto()
 
     def __str__(self):
@@ -18,4 +19,5 @@ class TravelPlannerState(TypedDict):
     current_step: str
     plan_data: dict
     required_info: dict
-    conversation_state: dict 
+    conversation_state: dict
+    calendar_data: dict 

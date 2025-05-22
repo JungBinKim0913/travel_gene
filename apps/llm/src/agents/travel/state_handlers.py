@@ -1,10 +1,12 @@
 from typing import Dict
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from datetime import datetime
 import json
 
 from .types import ConversationState
-from .utils import select_next_question, create_context_message, analyze_preferences
+from .utils import select_next_question, create_context_message, analyze_preferences, analyze_user_intent
+from .calendar_utils import create_calendar_events
+from .openai_utils import analyze_conversation_with_json_structure
 
 def understand_request(llm, state: Dict) -> Dict:
     """사용자 요청 이해"""
@@ -40,96 +42,52 @@ def understand_request(llm, state: Dict) -> Dict:
         
         last_messages = messages[-memory_size:] if len(messages) >= 3 else messages
         current_year = datetime.now().year
-        analysis_prompt = SystemMessage(content=f"""당신은 여행 대화 분석 전문가입니다. 주어진 대화 내용을 분석하여 정확히 아래 JSON 형식으로만 응답해야 합니다.
-
-        당신의 임무:
-        1. 대화에서 명시적으로 언급된 정보만 추출
-        2. 추측이나 가정은 절대 하지 않음
-        3. 아래 형식을 정확히 준수
-        4. 한글이 아닌 정확한 JSON 키 사용
-        5. 여행 기간은 구체적인 날짜가 없더라도 "2박 3일"과 같은 형식도 인식
-        6. 날짜 처리 시 다음 규칙을 따를 것:
-           - 연도가 없는 경우 현재 연도({current_year}) 사용
-           - 날짜가 있는 경우 반드시 요일을 확인하고 포함
-           - 날짜 형식은 "YYYY년 MM월 DD일 (요일)" 형식으로 통일
-           - 다양한 날짜 표현을 이해하고 처리 (예: "이번 주 토요일", "다음 달 초", "크리스마스")
-           - 잘못된 날짜나 요일 조합이 있는 경우 올바른 정보로 수정
-
-        응답 형식 (이 형식을 정확히 따라야 함):
-        {{
-            "core_info": {{
-                "destination": "목적지명 또는 null",
-                "dates": "여행날짜 또는 null (형식: YYYY년 MM월 DD일 (요일))",
-                "duration": "숙박일수 (예: 2) 또는 null",
-                "date_validation": {{
-                    "is_valid": true/false,
-                    "original": "원본 날짜 표현",
-                    "corrected": "수정된 날짜 (필요한 경우)"
-                }},
-                "preferences": ["선호도1", "선호도2"]
-            }},
-            "context": {{
-                "current_topic": "현재 주제",
-                "related_to_previous": true,
-                "user_interests": ["관심사1", "관심사2"]
-            }},
-            "next_steps": {{
-                "required_info": ["필요정보1", "필요정보2"],
-                "suggested_questions": ["질문1", "질문2"],
-                "recommendations": ["제안1", "제안2"]
-            }}
-        }}
-
-        날짜 처리 예시:
-        1. "다음 주 토요일" -> "{current_year}년 MM월 DD일 (토)"
-        2. "크리스마스" -> "{current_year}년 12월 25일 (수)"
-        3. "6월 7일" -> "{current_year}년 6월 7일 (금)"
         
-        잘못된 날짜/요일 조합 예시:
-        입력: "{current_year}년 6월 7일 (토)" -> 수정: "{current_year}년 6월 7일 (금)" (실제 요일로 수정)""")
-        
-        analysis_messages = [analysis_prompt, *last_messages]
-        analysis_response = llm.invoke(analysis_messages)
+        analysis_result = analyze_conversation_with_json_structure(llm, last_messages, current_year)
         
         try:
-            analysis_result = json.loads(analysis_response.content)
-            
-            if destination := analysis_result["core_info"].get("destination"):
+            if destination := analysis_result.get("core_info", {}).get("destination"):
                 conversation_state["destination"] = destination
             
-            if date_info := analysis_result["core_info"].get("date_validation"):
-                if not date_info["is_valid"] and date_info.get("corrected"):
+            if date_info := analysis_result.get("core_info", {}).get("date_validation"):
+                if not date_info.get("is_valid", True) and date_info.get("corrected"):
                     conversation_state["travel_dates"] = date_info["corrected"]
-                elif dates := analysis_result["core_info"].get("dates"):
+                elif dates := analysis_result.get("core_info", {}).get("dates"):
                     conversation_state["travel_dates"] = dates
             
-            if duration := analysis_result["core_info"].get("duration"):
+            if duration := analysis_result.get("core_info", {}).get("duration"):
                 conversation_state["duration"] = duration
                 conversation_state["confirmed_info"].add("travel_dates")
             
-            if preferences := analysis_result["core_info"].get("preferences"):
+            if preferences := analysis_result.get("core_info", {}).get("preferences"):
                 current_preferences = set(conversation_state.get("preferences", []))
                 current_preferences.update(preferences)
                 conversation_state["preferences"] = list(current_preferences)
             
-            conversation_state["last_topic"] = analysis_result["context"]["current_topic"]
-            conversation_state["context_keywords"].update(
-                analysis_result["context"]["user_interests"]
-            )
+            context_data = analysis_result.get("context", {})
+            conversation_state["last_topic"] = context_data.get("current_topic", conversation_state.get("last_topic"))
             
-            required_info = set(analysis_result["next_steps"]["required_info"])
-            conversation_state["pending_questions"] = list(
-                required_info - conversation_state["confirmed_info"]
-            )
+            user_interests = context_data.get("user_interests", [])
+            if user_interests:
+                current_keywords = set(conversation_state.get("context_keywords", set()))
+                current_keywords.update(user_interests)
+                conversation_state["context_keywords"] = current_keywords
+            
+            next_steps = analysis_result.get("next_steps", {})
+            required_info = set(next_steps.get("required_info", []))
+            
+            if required_info:
+                confirmed = set(conversation_state.get("confirmed_info", set()))
+                conversation_state["pending_questions"] = list(required_info - confirmed)
             
             conversation_state["interaction_history"].append({
                 "timestamp": datetime.now().isoformat(),
-                "topic": analysis_result["context"]["current_topic"],
-                "collected_info": list(required_info & conversation_state["confirmed_info"])
+                "topic": conversation_state["last_topic"],
+                "collected_info": list(required_info & conversation_state.get("confirmed_info", set()))
             })
             
-        except json.JSONDecodeError:
-            print("Warning: Failed to parse analysis result")
+        except Exception as e:
+            print(f"Error processing analysis result: {str(e)}")
         
         context_msg = create_context_message(conversation_state)
         if context_msg:
@@ -181,25 +139,14 @@ def determine_next_step(state: Dict) -> str:
     try:
         messages = state.get("messages", [])
         conversation_state = state.get("conversation_state", {})
-        memory_size = state.get("memory_size", 10)
+        plan_data = state.get("plan_data", {})
+        llm = state.get("llm")
         
         has_destination = bool(conversation_state.get("destination"))
         has_dates = bool(conversation_state.get("travel_dates"))
         has_preferences = bool(conversation_state.get("preferences"))
         
-        recent_messages = messages[-memory_size:] if len(messages) >= 3 else messages
-        plan_keywords = ["계획", "일정", "스케줄", "플랜", "짜줘"]
-        
-        for msg in recent_messages:
-            if isinstance(msg, HumanMessage):
-                content = msg.content.lower()
-                if any(keyword in content for keyword in plan_keywords):
-                    if has_destination and has_dates and has_preferences:
-                        return str(ConversationState.GENERATE_PLAN)
-                
-                if ("그대로" in content or "이대로" in content) and any(keyword in content for keyword in ["계획", "진행", "시작"]):
-                    if has_destination and has_dates and has_preferences:
-                        return str(ConversationState.GENERATE_PLAN)
+        has_plan = bool(plan_data.get("content"))
         
         if not has_destination:
             return str(ConversationState.ASK_DESTINATION)
@@ -209,6 +156,86 @@ def determine_next_step(state: Dict) -> str:
         
         if not has_preferences:
             return str(ConversationState.COLLECT_DETAILS)
+        
+        last_user_message = None
+        previous_ai_message = None
+        
+        for i, msg in enumerate(reversed(messages)):
+            if isinstance(msg, HumanMessage) and last_user_message is None:
+                last_user_message = msg
+            elif isinstance(msg, AIMessage) and previous_ai_message is None and last_user_message is not None:
+                previous_ai_message = msg
+                break
+        
+        if last_user_message and llm:
+            content = last_user_message.content
+            previous_content = previous_ai_message.content if previous_ai_message else None
+            
+            intent_analysis = analyze_user_intent(llm, content, has_plan, previous_content)
+            
+            print(f"Intent analysis: {intent_analysis}")
+            
+            primary_intent = intent_analysis.get("primary_intent", "일반 대화")
+            confidence = intent_analysis.get("confidence", 0.0)
+            is_affirmative = intent_analysis.get("is_affirmative_to_previous", False)
+            
+            CONFIDENCE_THRESHOLD = 0.7
+            
+            if confidence >= CONFIDENCE_THRESHOLD:
+                if primary_intent == "캘린더 등록 요청":
+                    if has_plan:
+                        return str(ConversationState.REGISTER_CALENDAR)
+                    elif has_destination and has_dates and has_preferences:
+                        messages.append(SystemMessage(content="""
+                        캘린더에 등록하려면 먼저 여행 계획이 필요합니다. 
+                        지금까지 수집된 정보를 바탕으로 여행 계획을 생성한 후 캘린더에 등록하겠습니다.
+                        """))
+                        return str(ConversationState.GENERATE_PLAN)
+                
+                if primary_intent == "여행 계획 생성 요청":
+                    if has_destination and has_dates and has_preferences:
+                        return str(ConversationState.GENERATE_PLAN)
+                
+                if primary_intent == "계획 수정 요청":
+                    if has_plan:
+                        return str(ConversationState.REFINE_PLAN)
+                    elif has_destination and has_dates and has_preferences:
+                        messages.append(SystemMessage(content="""
+                        수정할 여행 계획이 아직 없습니다. 
+                        먼저 기본 여행 계획을 생성한 후 수정하겠습니다.
+                        """))
+                        return str(ConversationState.GENERATE_PLAN)
+                
+                if primary_intent == "긍정 응답" and is_affirmative and previous_ai_message:
+                    prev_content = previous_ai_message.content.lower()
+                    
+                    plan_suggestion_keywords = ["계획", "일정", "만들어", "드릴까요", "작성해", "생성"]
+                    if any(keyword in prev_content for keyword in plan_suggestion_keywords) and has_destination and has_dates and has_preferences:
+                        return str(ConversationState.GENERATE_PLAN)
+                    
+                    calendar_suggestion_keywords = ["캘린더", "등록", "추가", "구글", "일정에"]
+                    if any(keyword in prev_content for keyword in calendar_suggestion_keywords) and has_plan:
+                        return str(ConversationState.REGISTER_CALENDAR)
+                    
+                    refine_suggestion_keywords = ["수정", "변경", "조정", "바꿔", "고쳐"]
+                    if any(keyword in prev_content for keyword in refine_suggestion_keywords) and has_plan:
+                        return str(ConversationState.REFINE_PLAN)
+            
+            else:
+                content_lower = content.lower()
+                plan_keywords = ["계획", "일정", "스케줄", "플랜", "짜줘"]
+                calendar_keywords = ["캘린더", "일정", "등록", "구글", "캘린더에", "달력"]
+                
+                if has_plan and any(keyword in content_lower for keyword in calendar_keywords):
+                    return str(ConversationState.REGISTER_CALENDAR)
+                
+                if any(keyword in content_lower for keyword in plan_keywords):
+                    if has_destination and has_dates and has_preferences:
+                        return str(ConversationState.GENERATE_PLAN)
+                
+                if ("그대로" in content_lower or "이대로" in content_lower) and any(keyword in content_lower for keyword in ["계획", "진행", "시작"]):
+                    if has_destination and has_dates and has_preferences:
+                        return str(ConversationState.GENERATE_PLAN)
         
         return str(ConversationState.UNDERSTAND_REQUEST)
         
@@ -367,4 +394,50 @@ def refine_plan(llm, state: Dict) -> Dict:
             "content": response.content,
             "previous_plan": plan_data.get("content", "")
         }
+    }
+
+def register_calendar(llm, state: Dict) -> Dict:
+    """여행 계획을 Google Calendar에 등록"""
+    messages = state.get("messages", [])
+    plan_data = state.get("plan_data", {})
+    
+    if not plan_data.get("content"):
+        error_msg = "Google Calendar 등록에 필요한 여행 계획 정보가 없습니다. 먼저 여행 계획을 생성해주세요."
+        messages.append(SystemMessage(content=error_msg))
+        response = llm.invoke(messages)
+        messages.append(response)
+        
+        return {
+            **state,
+            "messages": messages,
+            "current_step": str(ConversationState.UNDERSTAND_REQUEST)
+        }
+    
+    calendar_result = create_calendar_events(plan_data)
+    
+    if calendar_result["success"]:
+        calendar_msg = f"""여행 계획이 Google Calendar에 성공적으로 등록되었습니다.
+        
+        - 등록된 일정 수: {calendar_result['events_count']}개
+        
+        모든 일정은 Google Calendar에서 확인하실 수 있습니다.
+        추가 수정이 필요하시면 Google Calendar에서 직접 수정하시거나 말씀해주세요."""
+    else:
+        calendar_msg = f"""죄송합니다. Google Calendar 등록 중 문제가 발생했습니다.
+        
+        - 오류 메시지: {calendar_result['message']}
+        
+        다시 시도해보시겠어요?"""
+    
+    calendar_prompt = SystemMessage(content=calendar_msg)
+    messages.append(calendar_prompt)
+    
+    response = llm.invoke(messages)
+    messages.append(response)
+    
+    return {
+        **state,
+        "messages": messages,
+        "current_step": str(ConversationState.REGISTER_CALENDAR),
+        "calendar_data": calendar_result
     } 
