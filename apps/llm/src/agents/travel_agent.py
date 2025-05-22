@@ -27,6 +27,8 @@ class TravelPlannerState(TypedDict):
 class TravelPlannerAgent:
     """대화형 여행 계획 에이전트"""
     
+    CONVERSATION_MEMORY_SIZE = 10
+    
     def __init__(self, llm):
         self.llm = llm
         self.store = InMemoryStore()
@@ -97,7 +99,7 @@ class TravelPlannerAgent:
                 4. 맛집/관광지 추천
                 5. 교통편 안내"""))
             
-            last_messages = messages[-3:] if len(messages) >= 3 else messages
+            last_messages = messages[-self.CONVERSATION_MEMORY_SIZE:] if len(messages) >= 3 else messages
             current_year = datetime.now().year
             analysis_prompt = SystemMessage(content=f"""당신은 여행 대화 분석 전문가입니다. 주어진 대화 내용을 분석하여 정확히 아래 JSON 형식으로만 응답해야 합니다.
 
@@ -247,7 +249,7 @@ class TravelPlannerAgent:
             has_dates = bool(conversation_state.get("travel_dates"))
             has_preferences = bool(conversation_state.get("preferences"))
             
-            recent_messages = messages[-3:] if len(messages) >= 3 else messages
+            recent_messages = messages[-self.CONVERSATION_MEMORY_SIZE:] if len(messages) >= 3 else messages
             plan_keywords = ["계획", "일정", "스케줄", "플랜", "짜줘"]
             
             for msg in recent_messages:
@@ -327,7 +329,7 @@ class TravelPlannerAgent:
         if not messages:
             return []
         
-        recent_messages = messages[-3:]
+        recent_messages = messages[-self.CONVERSATION_MEMORY_SIZE:]
         
         analysis_prompt = SystemMessage(content="""사용자의 메시지에서 여행 선호도를 분석해주세요.
 
