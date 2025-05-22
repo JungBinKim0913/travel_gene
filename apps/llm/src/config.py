@@ -8,6 +8,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     openai_api_key: str = os.getenv("OPENAI_API_KEY")
+    google_calendar_api_key: str = os.getenv("GOOGLE_CALENDAR_API_KEY")
     
     class Config:
         env_file = ".env"
