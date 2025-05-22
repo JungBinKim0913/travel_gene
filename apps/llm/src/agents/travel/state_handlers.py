@@ -1,5 +1,5 @@
-from typing import Dict, List
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
+from typing import Dict
+from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime
 import json
 
@@ -99,7 +99,6 @@ def understand_request(llm, state: Dict) -> Dict:
             
             if date_info := analysis_result["core_info"].get("date_validation"):
                 if not date_info["is_valid"] and date_info.get("corrected"):
-                    # 잘못된 날짜/요일 조합이 있는 경우 수정된 정보 사용
                     conversation_state["travel_dates"] = date_info["corrected"]
                 elif dates := analysis_result["core_info"].get("dates"):
                     conversation_state["travel_dates"] = dates

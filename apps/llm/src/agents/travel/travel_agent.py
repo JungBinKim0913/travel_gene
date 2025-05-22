@@ -2,7 +2,6 @@ from typing import List, Dict, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.store.memory import InMemoryStore
-from datetime import datetime
 
 from .types import ConversationState, TravelPlannerState
 from .state_handlers import (
