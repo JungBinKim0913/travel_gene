@@ -203,7 +203,8 @@ if prompt := st.chat_input("메시지를 입력하세요"):
                                 "timestamp": msg.get("timestamp", datetime.now(timezone.utc).isoformat())
                             } for msg in st.session_state.chat_history
                         ],
-                        "user_preferences": st.session_state.user_preferences
+                        "user_preferences": st.session_state.user_preferences,
+                        "current_plan": st.session_state.current_plan
                     }
 
                     response = requests.post(

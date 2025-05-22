@@ -14,6 +14,7 @@ from ..utils.llm import get_llm
 class TravelPlanRequest(BaseModel):
     messages: List[ChatMessage]
     user_preferences: Optional[Dict] = None
+    current_plan: Optional[Dict] = None
 
 router = APIRouter(prefix="/travel", tags=["travel"])
 agent = TravelPlannerAgent(llm=get_llm())
@@ -59,19 +60,9 @@ async def stream_response(result: dict):
     if result.get("has_plan"):
         plan_data = result.get("plan", {})
         
-        cleaned_plan = {
-            "overview": {
-                "destination": plan_data.get("destination", "미정"),
-                "duration": plan_data.get("duration", "미정"),
-                "total_budget": plan_data.get("total_budget", "미정"),
-                "highlights": plan_data.get("highlights", [])
-            },
-            "daily_schedule": plan_data.get("daily_schedule", []),
-            "recommendations": plan_data.get("recommendations", []),
-            "preparations": plan_data.get("preparations", [])
-        }
-        
-        yield f"data: {json.dumps({'has_plan': True, 'plan': cleaned_plan})}\n\n"
+        # 계획 데이터를 클라이언트에 전달
+        # 계획 데이터를 그대로 전달하고 클라이언트에서 처리하도록 수정
+        yield f"data: {json.dumps({'has_plan': True, 'plan': plan_data})}\n\n"
     
     yield f"data: {json.dumps({'status': 'complete', 'message': '여행 계획이 완성되었습니다.'})}\n\n"
 
@@ -99,7 +90,11 @@ async def create_travel_plan(request: TravelPlanRequest):
             }
             message_dicts.insert(0, preferences_msg)
         
-        result = agent.chat(message_dicts, user_preferences=request.user_preferences)
+        result = agent.chat(
+            message_dicts, 
+            user_preferences=request.user_preferences,
+            current_plan=request.current_plan
+        )
         
         return StreamingResponse(
             stream_response(result),

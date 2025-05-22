@@ -10,7 +10,8 @@ from .state_handlers import (
     ask_destination, 
     collect_details, 
     generate_plan, 
-    refine_plan
+    refine_plan,
+    register_calendar
 )
 
 class TravelPlannerAgent:
@@ -40,17 +41,20 @@ class TravelPlannerAgent:
                          lambda state: ask_destination(self.llm, state))
         workflow.add_node(str(ConversationState.COLLECT_DETAILS), 
                          lambda state: collect_details(self.llm, state))
+        workflow.add_node(str(ConversationState.REGISTER_CALENDAR), 
+                         lambda state: register_calendar(self.llm, state))
         
         workflow.set_entry_point(str(ConversationState.UNDERSTAND_REQUEST))
 
         workflow.add_conditional_edges(
             str(ConversationState.UNDERSTAND_REQUEST),
-            determine_next_step,
+            lambda state: determine_next_step({**state, "llm": self.llm}),
             {
                 str(ConversationState.ASK_DESTINATION): str(ConversationState.ASK_DESTINATION),
                 str(ConversationState.COLLECT_DETAILS): str(ConversationState.COLLECT_DETAILS),
                 str(ConversationState.GENERATE_PLAN): str(ConversationState.GENERATE_PLAN),
                 str(ConversationState.REFINE_PLAN): str(ConversationState.REFINE_PLAN),
+                str(ConversationState.REGISTER_CALENDAR): str(ConversationState.REGISTER_CALENDAR),
                 str(ConversationState.END): END
             }
         )
@@ -59,10 +63,11 @@ class TravelPlannerAgent:
         workflow.add_edge(str(ConversationState.COLLECT_DETAILS), END)
         workflow.add_edge(str(ConversationState.GENERATE_PLAN), END)
         workflow.add_edge(str(ConversationState.REFINE_PLAN), END)
+        workflow.add_edge(str(ConversationState.REGISTER_CALENDAR), END)
         
         return workflow
 
-    def chat(self, messages: List[dict], user_preferences: Optional[Dict] = None) -> dict:
+    def chat(self, messages: List[dict], user_preferences: Optional[Dict] = None, current_plan: Optional[Dict] = None) -> dict:
         """Run the travel planner workflow"""
         try:
             base_messages = []
@@ -92,12 +97,23 @@ class TravelPlannerAgent:
                 elif msg["role"] == "assistant":
                     base_messages.append(AIMessage(content=msg["content"]))
             
+            plan_data = {}
+            if current_plan:
+                content = current_plan.get("content", "")
+                if content:
+                    plan_data = {
+                        "generated_at": current_plan.get("generated_at", "client"),
+                        "content": content,
+                        "collected_info": current_plan.get("collected_info", "")
+                    }
+            
             initial_state = {
                 "messages": base_messages,
                 "current_step": str(ConversationState.UNDERSTAND_REQUEST),
-                "plan_data": {},
+                "plan_data": plan_data,
                 "required_info": {},
                 "conversation_state": {},
+                "calendar_data": {},
                 "memory_size": self.CONVERSATION_MEMORY_SIZE
             }
 
