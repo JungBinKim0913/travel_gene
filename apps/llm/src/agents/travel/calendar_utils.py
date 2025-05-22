@@ -8,8 +8,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CREDENTIALS_FILE = 'credentials.json'
-TOKEN_FILE = 'token.json'
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+CREDENTIALS_FILE = os.path.join(current_dir, 'credentials.json')
+TOKEN_FILE = os.path.join(current_dir, 'token.json')
 
 def get_calendar_service():
     """Google Calendar API 서비스 객체 생성"""
