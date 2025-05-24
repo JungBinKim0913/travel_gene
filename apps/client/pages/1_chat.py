@@ -53,35 +53,6 @@ with st.sidebar:
 
 st.title("Travel Gene Chat 🗺️")
 
-# 여행 계획이 있을 때 상단에 성공 알림 표시
-if st.session_state.current_plan:
-    st.success("🎉 **여행 계획이 완성되었습니다!** 아래에서 확인하고 공유해보세요.")
-    
-    # 버튼들과 안내 메시지는 항상 보이게 표시
-    st.markdown("### 🎉 여행 계획이 완성되었습니다!")
-    
-    # 버튼을 컬럼으로 나누어 배치
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔗 공유 링크 생성", key="generate_share_link"):
-            share_url = generate_share_url(st.session_state.current_plan)
-            if share_url:
-                st.code(share_url)
-                st.success("🎉 공유 링크가 생성되었습니다! 위 링크를 복사해서 친구들에게 전송하세요.")
-    
-    with col2:
-        if st.button("🌐 계획 공유하기", key="share_plan_button", type="primary"):
-            st.switch_page("pages/2_share.py")
-    
-    st.info("💡 '계획 공유하기' 버튼을 누르면 예쁜 공유 페이지로 이동합니다!")
-    
-    # JSON 데이터만 별도의 접힌 expander로 표시
-    with st.expander("🔍 계획 데이터 확인 (상세보기)", expanded=False):
-        st.json(st.session_state.current_plan)
-    
-    st.markdown("---")
-
 # 채팅 기록이 없을 때 안내 메시지 표시
 if not st.session_state.chat_history:
     st.markdown("""
@@ -181,7 +152,7 @@ if not st.session_state.chat_history:
                 key="end_date_input"
             )
             destination = st.text_input("희망 여행지", key="destination_input")
-            budget = st.number_input("예산 (만원)", min_value=0, step=100, key="budget_input")
+            budget = st.number_input("예산 (만원)", min_value=0, value=100, step=100, key="budget_input")
         
         with col2:
             activities = st.multiselect(
@@ -251,6 +222,36 @@ else:
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+
+# 여행 계획이 있을 때 대화 아래에 성공 알림 표시
+if st.session_state.current_plan:
+    st.markdown("---")
+    st.success("🎉 **여행 계획이 완성되었습니다!** 아래에서 확인하고 공유해보세요.")
+    
+    # 버튼들과 안내 메시지는 항상 보이게 표시
+    st.markdown("### 🎉 여행 계획이 완성되었습니다!")
+    
+    # 버튼을 컬럼으로 나누어 배치
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔗 공유 링크 생성", key="generate_share_link"):
+            share_url = generate_share_url(st.session_state.current_plan)
+            if share_url:
+                st.code(share_url)
+                st.success("🎉 공유 링크가 생성되었습니다! 위 링크를 복사해서 친구들에게 전송하세요.")
+    
+    with col2:
+        if st.button("🌐 계획 공유하기", key="share_plan_button", type="primary"):
+            st.switch_page("pages/2_share.py")
+    
+    st.info("💡 '계획 공유하기' 버튼을 누르면 예쁜 공유 페이지로 이동합니다!")
+    
+    # JSON 데이터만 별도의 접힌 expander로 표시
+    with st.expander("🔍 계획 데이터 확인 (상세보기)", expanded=False):
+        st.json(st.session_state.current_plan)
+    
+    st.markdown("---")
 
 def generate_share_url(plan_data):
     """여행 계획 데이터를 URL로 인코딩"""   
