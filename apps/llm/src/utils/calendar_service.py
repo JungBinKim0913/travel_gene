@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import os
-from typing import Dict
+from typing import Dict, List, Optional
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -10,7 +10,6 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 REMINDER_TIME_MINUTES = 24 * 60
 MAX_DESCRIPTION_LENGTH = 1000
 
-# credentials.json 파일을 프로젝트 루트에서 찾도록 수정
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, 'credentials.json')
 TOKEN_FILE = os.path.join(PROJECT_ROOT, 'token.json')
@@ -87,4 +86,79 @@ def create_calendar_event(
         return {
             "success": False,
             "error": str(e)
-        } 
+        }
+
+def get_calendar_events(
+    service,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    max_results: int = 50,
+    query: Optional[str] = None
+) -> Dict:
+    """캘린더 이벤트 조회"""
+    try:
+        if start_date is None:
+            start_date = datetime.now()
+        if end_date is None:
+            end_date = start_date + timedelta(days=30)
+        
+        time_min = start_date.isoformat() + 'Z'
+        time_max = end_date.isoformat() + 'Z'
+        
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=time_min,
+            timeMax=time_max,
+            maxResults=max_results,
+            singleEvents=True,
+            orderBy='startTime',
+            q=query
+        ).execute()
+        
+        events = events_result.get('items', [])
+        
+        formatted_events = []
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            end = event['end'].get('dateTime', event['end'].get('date'))
+            
+            formatted_events.append({
+                'id': event['id'],
+                'summary': event.get('summary', '제목 없음'),
+                'description': event.get('description', ''),
+                'location': event.get('location', ''),
+                'start': start,
+                'end': end,
+                'html_link': event.get('htmlLink', ''),
+                'created': event.get('created', ''),
+                'updated': event.get('updated', '')
+            })
+        
+        return {
+            "success": True,
+            "events": formatted_events,
+            "total_count": len(formatted_events)
+        }
+        
+    except Exception as e:
+        print(f"이벤트 조회 오류: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "events": [],
+            "total_count": 0
+        }
+
+def get_upcoming_events(service, days_ahead: int = 7) -> Dict:
+    """다가오는 이벤트 조회"""
+    start_date = datetime.now()
+    end_date = start_date + timedelta(days=days_ahead)
+    
+    return get_calendar_events(service, start_date, end_date)
+
+def search_events_by_keyword(service, keyword: str, days_range: int = 365) -> Dict:
+    """키워드로 이벤트 검색"""
+    start_date = datetime.now() - timedelta(days=days_range//2)
+    end_date = datetime.now() + timedelta(days=days_range//2)
+    
+    return get_calendar_events(service, start_date, end_date, query=keyword) 
