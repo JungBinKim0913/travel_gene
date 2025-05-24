@@ -1,11 +1,11 @@
 from typing import Dict
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from datetime import datetime
-from .travel_calendar import create_travel_calendar_events
+from .travel_calendar import register_travel_calendar, view_travel_calendar
 
 from .types import ConversationState
 from .utils import select_next_question, create_context_message, analyze_preferences, analyze_user_intent
-from .openai_utils import analyze_conversation_with_json_structure
+from ...utils.openai_utils import analyze_conversation_with_json_structure
 
 def understand_request(llm, state: Dict) -> Dict:
     """사용자 요청 이해"""
@@ -147,15 +147,6 @@ def determine_next_step(state: Dict) -> str:
         
         has_plan = bool(plan_data.get("content"))
         
-        if not has_destination:
-            return str(ConversationState.ASK_DESTINATION)
-        
-        if not has_dates:
-            return str(ConversationState.COLLECT_DETAILS)
-        
-        if not has_preferences:
-            return str(ConversationState.COLLECT_DETAILS)
-        
         last_user_message = None
         previous_ai_message = None
         
@@ -181,6 +172,9 @@ def determine_next_step(state: Dict) -> str:
             CONFIDENCE_THRESHOLD = 0.7
             
             if confidence >= CONFIDENCE_THRESHOLD:
+                if primary_intent == "캘린더 조회 요청":
+                    return str(ConversationState.VIEW_CALENDAR)
+                
                 if primary_intent == "캘린더 등록 요청":
                     if has_plan:
                         return str(ConversationState.REGISTER_CALENDAR)
@@ -220,21 +214,25 @@ def determine_next_step(state: Dict) -> str:
                     if any(keyword in prev_content for keyword in refine_suggestion_keywords) and has_plan:
                         return str(ConversationState.REFINE_PLAN)
             
-            else:
-                content_lower = content.lower()
-                plan_keywords = ["계획", "일정", "스케줄", "플랜", "짜줘"]
-                calendar_keywords = ["캘린더", "일정", "등록", "구글", "캘린더에", "달력"]
-                
-                if has_plan and any(keyword in content_lower for keyword in calendar_keywords):
-                    return str(ConversationState.REGISTER_CALENDAR)
-                
-                if any(keyword in content_lower for keyword in plan_keywords):
-                    if has_destination and has_dates and has_preferences:
-                        return str(ConversationState.GENERATE_PLAN)
-                
-                if ("그대로" in content_lower or "이대로" in content_lower) and any(keyword in content_lower for keyword in ["계획", "진행", "시작"]):
-                    if has_destination and has_dates and has_preferences:
-                        return str(ConversationState.GENERATE_PLAN)
+            content_lower = content.lower()
+            plan_keywords = ["계획", "스케줄", "플랜", "짜줘"]
+            
+            if any(keyword in content_lower for keyword in plan_keywords):
+                if has_destination and has_dates and has_preferences:
+                    return str(ConversationState.GENERATE_PLAN)
+            
+            if ("그대로" in content_lower or "이대로" in content_lower) and any(keyword in content_lower for keyword in ["계획", "진행", "시작"]):
+                if has_destination and has_dates and has_preferences:
+                    return str(ConversationState.GENERATE_PLAN)
+        
+        if not has_destination:
+            return str(ConversationState.ASK_DESTINATION)
+        
+        if not has_dates:
+            return str(ConversationState.COLLECT_DETAILS)
+        
+        if not has_preferences:
+            return str(ConversationState.COLLECT_DETAILS)
         
         return str(ConversationState.UNDERSTAND_REQUEST)
         
@@ -402,8 +400,7 @@ def register_calendar(llm, state: Dict) -> Dict:
     
     if not plan_data.get("content"):
         error_msg = "Google Calendar 등록에 필요한 여행 계획 정보가 없습니다. 먼저 여행 계획을 생성해주세요."
-        messages.append(SystemMessage(content=error_msg))
-        response = llm.invoke(messages)
+        response = AIMessage(content=error_msg)
         messages.append(response)
         
         return {
@@ -412,7 +409,7 @@ def register_calendar(llm, state: Dict) -> Dict:
             "current_step": str(ConversationState.UNDERSTAND_REQUEST)
         }
     
-    calendar_result = create_travel_calendar_events(plan_data)
+    calendar_result = register_travel_calendar(plan_data)
     
     if calendar_result["success"]:
         calendar_msg = f"""여행 계획이 Google Calendar에 성공적으로 등록되었습니다.
@@ -428,10 +425,7 @@ def register_calendar(llm, state: Dict) -> Dict:
         
         다시 시도해보시겠어요?"""
     
-    calendar_prompt = SystemMessage(content=calendar_msg)
-    messages.append(calendar_prompt)
-    
-    response = llm.invoke(messages)
+    response = AIMessage(content=calendar_msg)
     messages.append(response)
     
     return {
@@ -439,4 +433,21 @@ def register_calendar(llm, state: Dict) -> Dict:
         "messages": messages,
         "current_step": str(ConversationState.REGISTER_CALENDAR),
         "calendar_data": calendar_result
+    }
+
+def view_calendar(llm, state: Dict) -> Dict:
+    """Google Calendar에서 여행 일정 조회"""
+    messages = state.get("messages", [])
+    conversation_state = state.get("conversation_state", {})
+    
+    result = view_travel_calendar(messages, conversation_state)
+    
+    response = AIMessage(content=result["message"])
+    messages.append(response)
+    
+    return {
+        **state,
+        "messages": messages,
+        "current_step": str(ConversationState.VIEW_CALENDAR),
+        "calendar_data": result["calendar_data"]
     } 

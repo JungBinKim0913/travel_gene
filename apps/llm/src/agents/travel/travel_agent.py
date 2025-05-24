@@ -11,7 +11,8 @@ from .state_handlers import (
     collect_details, 
     generate_plan, 
     refine_plan,
-    register_calendar
+    register_calendar,
+    view_calendar
 )
 
 class TravelPlannerAgent:
@@ -43,6 +44,8 @@ class TravelPlannerAgent:
                          lambda state: collect_details(self.llm, state))
         workflow.add_node(str(ConversationState.REGISTER_CALENDAR), 
                          lambda state: register_calendar(self.llm, state))
+        workflow.add_node(str(ConversationState.VIEW_CALENDAR), 
+                         lambda state: view_calendar(self.llm, state))
         
         workflow.set_entry_point(str(ConversationState.UNDERSTAND_REQUEST))
 
@@ -55,6 +58,7 @@ class TravelPlannerAgent:
                 str(ConversationState.GENERATE_PLAN): str(ConversationState.GENERATE_PLAN),
                 str(ConversationState.REFINE_PLAN): str(ConversationState.REFINE_PLAN),
                 str(ConversationState.REGISTER_CALENDAR): str(ConversationState.REGISTER_CALENDAR),
+                str(ConversationState.VIEW_CALENDAR): str(ConversationState.VIEW_CALENDAR),
                 str(ConversationState.END): END
             }
         )
@@ -64,6 +68,7 @@ class TravelPlannerAgent:
         workflow.add_edge(str(ConversationState.GENERATE_PLAN), END)
         workflow.add_edge(str(ConversationState.REFINE_PLAN), END)
         workflow.add_edge(str(ConversationState.REGISTER_CALENDAR), END)
+        workflow.add_edge(str(ConversationState.VIEW_CALENDAR), END)
         
         return workflow
 
