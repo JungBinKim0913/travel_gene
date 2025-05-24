@@ -143,7 +143,7 @@ def generate_share_url(plan_data):
     json_str = json.dumps(plan_data, ensure_ascii=False)
     encoded_data = base64.urlsafe_b64encode(json_str.encode('utf-8')).decode('utf-8')
     
-    base_url = "http://localhost:8501/여행공유"
+    base_url = "http://localhost:8501/share"
     share_url = f"{base_url}?plan={encoded_data}"
     
     return share_url
@@ -159,12 +159,316 @@ def decode_plan_from_url():
         st.error(f"공유 링크를 불러오는 중 오류가 발생했습니다: {e}")
     return None
 
+def parse_plan_info(plan):
+    """LLM 계획 데이터에서 정보 파싱"""
+    info = {
+        'destination': '여행지 미정',
+        'start_date': '미정',
+        'end_date': '미정', 
+        'budget': 0,
+        'activities': [],
+        'content': ''
+    }
+    
+    if 'collected_info' in plan:
+        collected = plan['collected_info']
+        
+        if '여행지:' in collected:
+            try:
+                destination = collected.split('여행지:')[1].split('\n')[0].strip()
+                if destination and destination != '':
+                    info['destination'] = destination
+            except:
+                pass
+        
+        if '여행 기간:' in collected:
+            try:
+                period = collected.split('여행 기간:')[1].split('\n')[0].strip()
+                if '~' in period:
+                    dates = period.split('~')
+                    if len(dates) >= 2:
+                        info['start_date'] = dates[0].strip()
+                        info['end_date'] = dates[1].strip()
+                elif period and period != '':
+                    info['start_date'] = period
+                    info['end_date'] = period
+            except:
+                pass
+        
+        if '선호 사항:' in collected:
+            try:
+                activities_str = collected.split('선호 사항:')[1].split('\n')[0].strip()
+                activities_str = activities_str.replace('[', '').replace(']', '').replace("'", '')
+                if activities_str:
+                    info['activities'] = [act.strip() for act in activities_str.split(',')]
+            except:
+                pass
+    
+    if 'content' in plan:
+        info['content'] = plan['content']
+    
+    return info
+
+def parse_itinerary_from_content(content):
+    """LLM 내용에서 일정 정보 파싱 - '일자별 세부 일정' 섹션만"""
+    itinerary = []
+    
+    itinerary_section = ""
+    lines = content.split('\n')
+    
+    in_itinerary_section = False
+    
+    for line in lines:
+        line = line.strip()
+        
+        if '일자별' in line and '일정' in line:
+            in_itinerary_section = True
+            continue
+        
+        elif in_itinerary_section and (
+            line.startswith('3.') or 
+            line.startswith('4.') or 
+            '준비사항' in line or 
+            '대체 옵션' in line or
+            '주의사항' in line
+        ):
+            break
+        
+        elif in_itinerary_section:
+            itinerary_section += line + '\n'
+    
+    if not itinerary_section.strip():
+        return []
+    
+    lines = itinerary_section.split('\n')
+    current_day = None
+    current_activities = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        if line.startswith('#'):
+            continue
+            
+        if ('월' in line and '일' in line and ('(' in line or '년' in line)):
+            if current_day and current_activities:
+                itinerary.append({
+                    'date': current_day,
+                    'activities': current_activities
+                })
+            
+            current_day = line.replace('-', '').replace('#', '').strip()
+            current_activities = []
+        
+        elif ':' in line and current_day:
+            try:
+                time = ''
+                title = ''
+                
+                if line.startswith('-') and ': ' in line:
+                    line_clean = line.lstrip('-').strip()
+                    if ':' in line_clean:
+                        parts = line_clean.split(': ', 1)
+                        if len(parts) == 2:
+                            potential_time = parts[0].strip()
+                            potential_title = parts[1].strip()
+                            if any(char.isdigit() for char in potential_time) or potential_time in ['오전', '오후', '아침', '점심', '저녁']:
+                                time = potential_time
+                                title = potential_title
+                            else:
+                                time = ''
+                                title = line_clean
+                        else:
+                            time = ''
+                            title = line_clean
+                    else:
+                        time = ''
+                        title = line_clean
+                elif line.startswith('-') and ' - ' in line:
+                    line_clean = line.lstrip('-').strip()
+                    if ' - ' in line_clean:
+                        time_part, activity_part = line_clean.split(' - ', 1)
+                        time = time_part.strip()
+                        title = activity_part.strip()
+                    else:
+                        time = ''
+                        title = line_clean
+                elif ' - ' in line and ':' in line:
+                    time_part, activity_part = line.split(' - ', 1)
+                    time = time_part.strip()
+                    title = activity_part.strip()
+                elif ':' in line and not ' - ' in line and not line.startswith('-'):
+                    time_part, activity_part = line.split(':', 1)
+                    time = time_part.strip()
+                    title = activity_part.strip()
+                else:
+                    time = ''
+                    title = line.strip()
+                
+                activity = {
+                    'time': time,
+                    'title': title,
+                    'location': '',
+                    'description': ''
+                }
+                
+                current_activities.append(activity)
+                
+            except:
+                if current_day:
+                    activity = {
+                        'time': '',
+                        'title': line,
+                        'location': '',
+                        'description': ''
+                    }
+                    current_activities.append(activity)
+        
+        elif (line.startswith('○') or line.startswith('o') or line.startswith('•') or 
+              line.startswith('-') and not ('월' in line and '일' in line)) and current_day:
+            detail = line.replace('○', '').replace('o', '').replace('•', '').replace('-', '').strip()
+            if detail:
+                if ':' in detail and ' - ' in detail:
+                    try:
+                        time_part, activity_part = detail.split(' - ', 1)
+                        activity = {
+                            'time': time_part.strip(),
+                            'title': activity_part.strip(),
+                            'location': '',
+                            'description': ''
+                        }
+                        current_activities.append(activity)
+                    except:
+                        pass
+                else:
+                    activity = {
+                        'time': '',
+                        'title': detail,
+                        'location': '',
+                        'description': ''
+                    }
+                    current_activities.append(activity)
+    
+    if current_day and current_activities:
+        itinerary.append({
+            'date': current_day,
+            'activities': current_activities
+        })
+    
+    return itinerary
+
+def render_llm_trip_header(plan_info):
+    """LLM 계획 정보로 헤더 렌더링"""
+    destination = plan_info['destination']
+    start_date = plan_info['start_date']
+    end_date = plan_info['end_date']
+    
+    days_count = 0
+    if start_date != '미정' and end_date != '미정':
+        try:
+            from datetime import datetime
+            start = datetime.strptime(start_date.split('(')[0].strip(), '%Y년 %m월 %d일')
+            end = datetime.strptime(end_date.split('(')[0].strip(), '%Y년 %m월 %d일')
+            days_count = (end - start).days + 1
+        except:
+            days_count = 1
+    
+    if start_date != '미정' and end_date != '미정':
+        date_display = f"{start_date} ~ {end_date}"
+    else:
+        date_display = "미정"
+    
+    st.markdown(f"""
+    <div class="trip-card">
+        <h1>🗺️ {destination} 여행</h1>
+        <div class="trip-stats">
+            <div class="stat-item">
+                <p>📅 {date_display}</p>
+            </div>
+            <div class="stat-item">
+                <p>🎯 {'・'.join(plan_info['activities']) if plan_info['activities'] else '일반 여행'}</p>
+            </div>
+            <div class="stat-item">
+                <p>📍 {days_count}일 일정</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_llm_content(content):
+    """LLM 생성 내용 렌더링"""
+    st.markdown("## 📋 여행 계획")
+    
+    itinerary = parse_itinerary_from_content(content)
+    
+    if itinerary:
+        st.markdown("### 📅 여행 일정")
+        render_itinerary(itinerary)
+        
+        st.markdown("### 📝 추가 정보")
+        
+        sections = content.split('\n\n')
+        for section in sections:
+            if section.strip():
+                if not any(keyword in section for keyword in ['일자별', '일정', '6월', '7월', '8월', '9월', '10월', '11월', '12월', '1월', '2월', '3월', '4월', '5월']):
+                    lines = section.strip().split('\n')
+                    if lines:
+                        first_line = lines[0].strip()
+                        if any(keyword in first_line for keyword in ['준비사항', '대체 옵션', '주의사항']):
+                            st.subheader(first_line)
+                            if len(lines) > 1:
+                                content_lines = '\n'.join(lines[1:])
+                                st.markdown(content_lines)
+                        elif not any(digit in first_line for digit in '0123456789'):
+                            st.markdown(section)
+    else:
+        sections = content.split('\n\n')
+        
+        for section in sections:
+            if section.strip():
+                lines = section.strip().split('\n')
+                if lines:
+                    first_line = lines[0].strip()
+                    if any(keyword in first_line for keyword in ['개요', '일정', '준비사항', '대체 옵션']):
+                        st.subheader(first_line)
+                        if len(lines) > 1:
+                            content_lines = '\n'.join(lines[1:])
+                            st.markdown(content_lines)
+                    else:
+                        st.markdown(section)
+
 def render_trip_header(plan):
     """여행 헤더 렌더링"""
-    destination = plan.get('destination', '여행지 미정')
-    start_date = plan.get('travel_dates', {}).get('start', '')
-    end_date = plan.get('travel_dates', {}).get('end', '')
-    budget = plan.get('budget', 0)
+    destination = None
+    start_date = None
+    end_date = None
+    budget = None
+    
+    if 'destination' in plan:
+        destination = plan['destination']
+    elif 'user_preferences' in plan and 'destination' in plan['user_preferences']:
+        destination = plan['user_preferences']['destination']
+    
+    if 'travel_dates' in plan:
+        start_date = plan['travel_dates'].get('start', '')
+        end_date = plan['travel_dates'].get('end', '')
+    elif 'user_preferences' in plan and 'travel_dates' in plan['user_preferences']:
+        start_date = plan['user_preferences']['travel_dates'].get('start', '')
+        end_date = plan['user_preferences']['travel_dates'].get('end', '')
+    
+    if 'budget' in plan:
+        budget = plan['budget']
+    elif 'user_preferences' in plan and 'budget' in plan['user_preferences']:
+        budget = plan['user_preferences']['budget']
+    
+    destination = destination or '여행지 미정'
+    start_date = start_date or '미정'
+    end_date = end_date or '미정'
+    budget = budget or 0
+    
+    itinerary_count = len(plan.get('itinerary', []))
     
     st.markdown(f"""
     <div class="trip-card">
@@ -180,7 +484,7 @@ def render_trip_header(plan):
             </div>
             <div class="stat-item">
                 <h3>📍</h3>
-                <p>{len(plan.get('itinerary', []))}일 일정</p>
+                <p>{itinerary_count}일 일정</p>
             </div>
         </div>
     </div>
@@ -189,26 +493,70 @@ def render_trip_header(plan):
 def render_itinerary(itinerary):
     """일정 렌더링"""
     for day_num, day_plan in enumerate(itinerary, 1):
+        date_display = day_plan.get('date', '').replace('**', '')
+        
         st.markdown(f"""
         <div class="day-card">
-            <h3>🌅 {day_num}일차 - {day_plan.get('date', '')}</h3>
+            <h3>🌅 {day_num}일차 - {date_display}</h3>
         </div>
         """, unsafe_allow_html=True)
         
         activities = day_plan.get('activities', [])
         for activity in activities:
-            time = activity.get('time', '')
-            title = activity.get('title', '')
-            description = activity.get('description', '')
-            location = activity.get('location', '')
+            time = activity.get('time', '').strip()
+            title = activity.get('title', '').replace('**', '').strip()
+            description = activity.get('description', '').replace('**', '').strip()
+            location = activity.get('location', '').replace('**', '').strip()
             
-            st.markdown(f"""
+            def get_activity_icon(title_text):
+                title_lower = title_text.lower()
+                if any(word in title_lower for word in ['이동', '출발', '도착', '픽업', '드롭오프', '교통', '버스', '지하철', '택시', '렌터카']):
+                    return '🚗'
+                elif any(word in title_lower for word in ['식사', '점심', '저녁', '아침', '브런치', '디너', '맛집', '음식', '식당']):
+                    return '🍽️'
+                elif any(word in title_lower for word in ['카페', '커피', '빵집']):
+                    return '☕️'
+                elif any(word in title_lower for word in ['체크인', '체크아웃', '숙소', '호텔', '펜션', '게스트하우스']):
+                    return '🏨'
+                elif any(word in title_lower for word in ['관광', '투어', '견학', '구경', '방문', '관람']):
+                    return '🎯'
+                elif any(word in title_lower for word in ['쇼핑', '구매', '마트', '시장', '아울렛']):
+                    return '🛍️'
+                elif any(word in title_lower for word in ['휴식', '산책', '쉬기', '자유시간']):
+                    return '😌'
+                else:
+                    return '📍'
+            
+            activity_icon = get_activity_icon(title)
+            
+            def is_category_title(time):
+                category_keywords = ['- 이동 수단', '- 식사 계획', '추천 코스', '대체 옵션', '주의사항']
+                return any(keyword in time for keyword in category_keywords)
+            
+            should_show_time = time and not is_category_title(time)
+            
+            if should_show_time:
+                main_section = f"<div style='margin-bottom: 4px;'><div style='margin-bottom: 2px;'><strong>⏰ {time}</strong></div><div style='margin-left: 8px;'><strong>{activity_icon} {title}</strong></div></div>"
+            else:
+                main_section = f"<div style='margin-bottom: 20px;'><strong>{activity_icon} {title}</strong></div>"
+            
+            location_section = ""
+            if location:
+                location_section = f"<div style='margin-bottom: 4px; color: #666; font-size: 14px;'>📍 {location}</div>"
+            
+            description_section = ""
+            if description:
+                description_section = f"<div style='font-size: 13px; color: #888;'>{description}</div>"
+            
+            activity_html = f"""
             <div class="activity-item">
-                <strong>⏰ {time} - {title}</strong><br>
-                📍 {location}<br>
-                <small>{description}</small>
+                {main_section}
+                {location_section}
+                {description_section}
             </div>
-            """, unsafe_allow_html=True)
+            """
+            
+            st.markdown(activity_html, unsafe_allow_html=True)
 
 def render_share_options(plan):
     """공유 옵션 렌더링"""
@@ -216,12 +564,12 @@ def render_share_options(plan):
     
     col1, col2, col3 = st.columns(3)
     
-    copy_clicked = False
+    generate_clicked = False
     kakao_clicked = False
     email_clicked = False
     
     with col1:
-        copy_clicked = st.button("📋 링크 복사", key="copy_link")
+        generate_clicked = st.button("📋 링크 생성", key="generate_link")
     
     with col2:
         kakao_clicked = st.button("📱 카카오톡 공유", key="kakao_share")
@@ -229,20 +577,18 @@ def render_share_options(plan):
     with col3:
         email_clicked = st.button("📧 이메일 전송", key="email_share")
     
-    if copy_clicked:
+    if generate_clicked:
         share_url = generate_share_url(plan)
         if share_url:
             clipboard_js = f"""
             <div style="height: 50px; opacity: 0;">
                 <script>
-                // DOM이 완전히 로드된 후 실행
                 document.addEventListener('DOMContentLoaded', function() {{
                     setTimeout(function() {{
                         copyToClipboardAndShowDialog();
                     }}, 50);
                 }});
                 
-                // 페이지가 이미 로드된 경우를 위한 즉시 실행
                 if (document.readyState === 'complete' || document.readyState === 'interactive') {{
                     setTimeout(function() {{
                         copyToClipboardAndShowDialog();
@@ -252,7 +598,6 @@ def render_share_options(plan):
                 function copyToClipboardAndShowDialog() {{
                     const url = "{share_url}";
                     
-                    // 첫 번째 시도: navigator.clipboard (HTTPS 환경에서만)
                     if (navigator.clipboard && window.isSecureContext) {{
                         navigator.clipboard.writeText(url).then(function() {{
                             showSuccessDialog();
@@ -261,7 +606,6 @@ def render_share_options(plan):
                             fallbackCopyTextToClipboard(url);
                         }});
                     }} else {{
-                        // 두 번째 시도: execCommand
                         fallbackCopyTextToClipboard(url);
                     }}
                 }}
@@ -280,11 +624,10 @@ def render_share_options(plan):
                         textArea.style.outline = "none";
                         textArea.style.boxShadow = "none";
                         textArea.style.background = "transparent";
-                        textArea.style.fontSize = "16px"; // iOS Safari 줌 방지
+                        textArea.style.fontSize = "16px"; 
                         
                         document.body.appendChild(textArea);
                         
-                        // iOS Safari 지원
                         if (navigator.userAgent.match(/ipad|iphone/i)) {{
                             const range = document.createRange();
                             range.selectNodeContents(textArea);
@@ -317,13 +660,11 @@ def render_share_options(plan):
                 }}
                 
                 function showDialog(message, bgColor, duration = 3000) {{
-                    // 기존 다이얼로그 제거
                     const existingDialog = document.getElementById('copyDialog');
                     if (existingDialog) {{
                         existingDialog.remove();
                     }}
                     
-                    // 다이얼로그 생성
                     const dialog = document.createElement('div');
                     dialog.id = 'copyDialog';
                     dialog.style.cssText = `
@@ -349,7 +690,6 @@ def render_share_options(plan):
                     
                     document.body.appendChild(dialog);
                     
-                    // 지정된 시간 후 제거
                     setTimeout(function() {{
                         if (dialog && dialog.parentNode) {{
                             dialog.parentNode.removeChild(dialog);
@@ -380,45 +720,92 @@ shared_plan = decode_plan_from_url()
 if shared_plan:
     st.success("🎉 공유된 여행 계획을 불러왔습니다!")
     
-    render_trip_header(shared_plan)
+    if 'content' in shared_plan and 'collected_info' in shared_plan:
+        plan_info = parse_plan_info(shared_plan)
+        
+        render_llm_trip_header(plan_info)
+        
+        if plan_info['content']:
+            render_llm_content(plan_info['content'])
+        
+    else:
+        render_trip_header(shared_plan)
+        
+        if 'itinerary' in shared_plan and shared_plan['itinerary']:
+            st.markdown("## 📅 여행 일정")
+            render_itinerary(shared_plan['itinerary'])
+        
+        if 'preferences' in shared_plan:
+            prefs = shared_plan['preferences']
+            
+            st.markdown("## ✨ 여행 선호사항")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if 'activities' in prefs:
+                    st.markdown(f"**🎯 선호 활동:** {', '.join(prefs['activities'])}")
+                if 'accommodation' in prefs:
+                    st.markdown(f"**🏠 숙소 유형:** {prefs['accommodation']}")
+            
+            with col2:
+                if 'transport' in prefs:
+                    st.markdown(f"**🚗 이동수단:** {prefs['transport']}")
+                if 'special_requests' in prefs and prefs['special_requests']:
+                    st.markdown(f"**✏️ 특별 요청:** {prefs['special_requests']}")
     
-    if 'itinerary' in shared_plan and shared_plan['itinerary']:
-        st.markdown("## 📅 여행 일정")
-        render_itinerary(shared_plan['itinerary'])
+    st.markdown("---")
+    render_share_options(shared_plan)
     
-    if 'preferences' in shared_plan:
-        prefs = shared_plan['preferences']
-        
-        st.markdown("## ✨ 여행 선호사항")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if 'activities' in prefs:
-                st.markdown(f"**🎯 선호 활동:** {', '.join(prefs['activities'])}")
-            if 'accommodation' in prefs:
-                st.markdown(f"**🏠 숙소 유형:** {prefs['accommodation']}")
-        
-        with col2:
-            if 'transport' in prefs:
-                st.markdown(f"**🚗 이동수단:** {prefs['transport']}")
-            if 'special_requests' in prefs and prefs['special_requests']:
-                st.markdown(f"**✏️ 특별 요청:** {prefs['special_requests']}")
+    st.markdown("---")
+    with st.expander("🔍 계획 데이터 확인 (디버깅용)", expanded=False):
+        st.json(shared_plan)
 
 elif 'current_plan' in st.session_state and st.session_state.current_plan:
     plan = st.session_state.current_plan
     
     st.info("💡 채팅에서 생성한 여행 계획이 있습니다!")
     
-    render_trip_header(plan)
+    with st.expander("🔍 계획 데이터 확인 (디버깅용)", expanded=False):
+        st.json(plan)
     
-    if 'itinerary' in plan and plan['itinerary']:
-        st.markdown("## 📅 여행 일정")
-        render_itinerary(plan['itinerary'])
+    if 'content' in plan and 'collected_info' in plan:
+        plan_info = parse_plan_info(plan)
         
-        st.markdown("---")
-        render_share_options(plan)
+        render_llm_trip_header(plan_info)
+        
+        if plan_info['content']:
+            render_llm_content(plan_info['content'])
+        
     else:
-        st.warning("여행 일정이 아직 생성되지 않았습니다.")
+        render_trip_header(plan)
+        
+        if 'itinerary' in plan and plan['itinerary']:
+            st.markdown("## 📅 여행 일정")
+            render_itinerary(plan['itinerary'])
+        else:
+            st.markdown("## 📅 여행 일정")
+            st.info("📝 여행 일정이 아직 생성되지 않았지만, 기본 계획 정보를 공유할 수 있습니다.")
+        
+        if 'preferences' in plan:
+            prefs = plan['preferences']
+            
+            st.markdown("## ✨ 여행 선호사항")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if 'activities' in prefs:
+                    st.markdown(f"**🎯 선호 활동:** {', '.join(prefs['activities'])}")
+                if 'accommodation' in prefs:
+                    st.markdown(f"**🏠 숙소 유형:** {prefs['accommodation']}")
+            
+            with col2:
+                if 'transport' in prefs:
+                    st.markdown(f"**🚗 이동수단:** {prefs['transport']}")
+                if 'special_requests' in prefs and prefs['special_requests']:
+                    st.markdown(f"**✏️ 특별 요청:** {prefs['special_requests']}")
+    
+    st.markdown("---")
+    render_share_options(plan)
 
 else:
     st.markdown("""
@@ -429,28 +816,8 @@ else:
     1. **채팅 페이지**에서 AI와 여행 계획 완성
     2. 이 페이지에서 **공유 링크 생성**
     3. 친구들에게 **링크 전송**
-    
-    또는 공유받은 링크를 직접 입력하세요:
     """)
     
-    manual_link = st.text_input("🔗 공유 링크 입력", placeholder="https://...")
-    
-    if manual_link and 'plan=' in manual_link:
-        try:
-            plan_param = manual_link.split('plan=')[1].split('&')[0]
-            json_str = base64.urlsafe_b64decode(plan_param.encode('utf-8')).decode('utf-8')
-            decoded_plan = json.loads(json_str)
-            
-            st.success("✅ 여행 계획을 성공적으로 불러왔습니다!")
-            
-            render_trip_header(decoded_plan)
-            
-            if 'itinerary' in decoded_plan and decoded_plan['itinerary']:
-                st.markdown("## 📅 여행 일정")
-                render_itinerary(decoded_plan['itinerary'])
-                
-        except Exception as e:
-            st.error("❌ 올바르지 않은 공유 링크입니다.")
     
     st.markdown("---")
     st.markdown("### 🎨 공유 페이지 미리보기")
