@@ -1,7 +1,12 @@
 from typing import Dict
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from datetime import datetime
-from .travel_calendar import register_travel_calendar, view_travel_calendar
+from .travel_calendar import (
+    register_travel_calendar, 
+    view_travel_calendar, 
+    handle_calendar_modification,
+    handle_calendar_deletion
+)
 
 from .types import ConversationState
 from .utils import select_next_question, create_context_message, analyze_preferences, analyze_user_intent
@@ -184,6 +189,12 @@ def determine_next_step(state: Dict) -> str:
                         지금까지 수집된 정보를 바탕으로 여행 계획을 생성한 후 캘린더에 등록하겠습니다.
                         """))
                         return str(ConversationState.GENERATE_PLAN)
+                
+                if primary_intent == "캘린더 수정 요청":
+                    return str(ConversationState.MODIFY_CALENDAR)
+                
+                if primary_intent == "캘린더 삭제 요청":
+                    return str(ConversationState.DELETE_CALENDAR)
                 
                 if primary_intent == "여행 계획 생성 요청":
                     if has_destination and has_dates and has_preferences:
@@ -449,5 +460,41 @@ def view_calendar(llm, state: Dict) -> Dict:
         **state,
         "messages": messages,
         "current_step": str(ConversationState.VIEW_CALENDAR),
+        "calendar_data": result["calendar_data"]
+    }
+
+def modify_calendar(llm, state: Dict) -> Dict:
+    """Calendar에서 여행 일정 수정"""
+    messages = state.get("messages", [])
+    conversation_state = state.get("conversation_state", {})
+    calendar_data = state.get("calendar_data", {})
+    
+    result = handle_calendar_modification(messages, conversation_state, calendar_data, llm)
+    
+    response = AIMessage(content=result["message"])
+    messages.append(response)
+    
+    return {
+        **state,
+        "messages": messages,
+        "current_step": str(ConversationState.MODIFY_CALENDAR),
+        "calendar_data": result["calendar_data"]
+    }
+
+def delete_calendar(llm, state: Dict) -> Dict:
+    """Google Calendar에서 여행 일정 삭제"""
+    messages = state.get("messages", [])
+    conversation_state = state.get("conversation_state", {})
+    calendar_data = state.get("calendar_data", {})
+    
+    result = handle_calendar_deletion(messages, conversation_state, calendar_data, llm)
+    
+    response = AIMessage(content=result["message"])
+    messages.append(response)
+    
+    return {
+        **state,
+        "messages": messages,
+        "current_step": str(ConversationState.DELETE_CALENDAR),
         "calendar_data": result["calendar_data"]
     } 

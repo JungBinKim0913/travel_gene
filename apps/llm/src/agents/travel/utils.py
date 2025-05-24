@@ -113,11 +113,13 @@ def analyze_user_intent(llm, message: str, has_plan: bool, previous_ai_message: 
     1. 여행 계획 생성 요청: 사용자가 새로운 여행 계획을 만들어달라고 요청
     2. 캘린더 등록 요청: 생성된 여행 계획을 Google Calendar에 등록해달라고 요청
     3. 캘린더 조회 요청: Google Calendar에 있는 여행 일정을 조회해달라고 요청 (예: "일정 확인", "언제 여행 가는지", "캘린더 보기", "예정된 여행", "다가오는 일정" 등)
-    4. 계획 세부정보 문의: 여행 계획의 특정 부분에 대해 질문
-    5. 계획 수정 요청: 생성된 계획의 일부를 변경해달라고 요청
-    6. 긍정 응답: 이전 질문이나 제안에 대한 긍정적인 답변 (예: "네", "좋아요", "그래요")
-    7. 부정 응답: 이전 질문이나 제안에 대한 부정적인 답변 (예: "아니요", "싫어요")
-    8. 일반 대화: 특별한 의도 없이 일반적인 대화 진행
+    4. 캘린더 수정 요청: 기존 캘린더 일정을 수정해달라고 요청 (예: "일정 수정", "변경해줘", "날짜 바꿔줘", "첫번째 일정 수정" 등)
+    5. 캘린더 삭제 요청: 기존 캘린더 일정을 삭제해달라고 요청 (예: "일정 삭제", "지워줘", "취소해줘", "첫번째 일정 삭제" 등)
+    6. 계획 세부정보 문의: 여행 계획의 특정 부분에 대해 질문
+    7. 계획 수정 요청: 생성된 계획의 일부를 변경해달라고 요청
+    8. 긍정 응답: 이전 질문이나 제안에 대한 긍정적인 답변 (예: "네", "좋아요", "그래요")
+    9. 부정 응답: 이전 질문이나 제안에 대한 부정적인 답변 (예: "아니요", "싫어요")
+    10. 일반 대화: 특별한 의도 없이 일반적인 대화 진행
     
     응답은 정확한 JSON 형식으로 제공해주세요. 다음 필드가 포함되어야 합니다:
     - primary_intent: 위 목록 중 가장 적합한 의도
@@ -126,6 +128,7 @@ def analyze_user_intent(llm, message: str, has_plan: bool, previous_ai_message: 
     - requires_plan: 해당 의도가 기존 계획을 필요로 하는지 여부 (true/false)
     - context_analysis: 간단한 메시지 문맥 분석
     - is_affirmative_to_previous: 이전 제안에 대한 긍정 응답인지 여부 (true/false)
+    - selected_event_number: 특정 번호 일정을 지칭하는 경우 해당 번호 (예: "첫번째", "2번", "세번째" 등을 1, 2, 3으로 변환)
     """
     
     messages = [
@@ -150,5 +153,6 @@ def analyze_user_intent(llm, message: str, has_plan: bool, previous_ai_message: 
             "keywords_detected": [],
             "requires_plan": False,
             "context_analysis": "분석 실패",
-            "is_affirmative_to_previous": False
+            "is_affirmative_to_previous": False,
+            "selected_event_number": None
         } 
