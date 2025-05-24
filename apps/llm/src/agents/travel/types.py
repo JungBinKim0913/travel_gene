@@ -10,6 +10,8 @@ class ConversationState(Enum):
     REFINE_PLAN = auto()
     REGISTER_CALENDAR = auto()
     VIEW_CALENDAR = auto()
+    MODIFY_CALENDAR = auto()
+    DELETE_CALENDAR = auto()
     END = auto()
 
     def __str__(self):

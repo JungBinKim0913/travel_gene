@@ -12,7 +12,9 @@ from .state_handlers import (
     generate_plan, 
     refine_plan,
     register_calendar,
-    view_calendar
+    view_calendar,
+    modify_calendar,
+    delete_calendar
 )
 
 class TravelPlannerAgent:
@@ -46,6 +48,10 @@ class TravelPlannerAgent:
                          lambda state: register_calendar(self.llm, state))
         workflow.add_node(str(ConversationState.VIEW_CALENDAR), 
                          lambda state: view_calendar(self.llm, state))
+        workflow.add_node(str(ConversationState.MODIFY_CALENDAR), 
+                         lambda state: modify_calendar(self.llm, state))
+        workflow.add_node(str(ConversationState.DELETE_CALENDAR), 
+                         lambda state: delete_calendar(self.llm, state))
         
         workflow.set_entry_point(str(ConversationState.UNDERSTAND_REQUEST))
 
@@ -59,6 +65,8 @@ class TravelPlannerAgent:
                 str(ConversationState.REFINE_PLAN): str(ConversationState.REFINE_PLAN),
                 str(ConversationState.REGISTER_CALENDAR): str(ConversationState.REGISTER_CALENDAR),
                 str(ConversationState.VIEW_CALENDAR): str(ConversationState.VIEW_CALENDAR),
+                str(ConversationState.MODIFY_CALENDAR): str(ConversationState.MODIFY_CALENDAR),
+                str(ConversationState.DELETE_CALENDAR): str(ConversationState.DELETE_CALENDAR),
                 str(ConversationState.END): END
             }
         )
@@ -70,7 +78,45 @@ class TravelPlannerAgent:
         workflow.add_edge(str(ConversationState.REGISTER_CALENDAR), END)
         workflow.add_edge(str(ConversationState.VIEW_CALENDAR), END)
         
+        workflow.add_conditional_edges(
+            str(ConversationState.MODIFY_CALENDAR),
+            lambda state: self._determine_calendar_next_step(state, "modification"),
+            {
+                str(ConversationState.MODIFY_CALENDAR): str(ConversationState.MODIFY_CALENDAR),
+                str(ConversationState.END): END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            str(ConversationState.DELETE_CALENDAR),
+            lambda state: self._determine_calendar_next_step(state, "deletion"),
+            {
+                str(ConversationState.DELETE_CALENDAR): str(ConversationState.DELETE_CALENDAR),
+                str(ConversationState.END): END
+            }
+        )
+        
         return workflow
+
+    def _determine_calendar_next_step(self, state: Dict, operation_type: str) -> str:
+        """캘린더 작업(수정/삭제)의 다음 단계 결정"""
+        calendar_data = state.get("calendar_data", {})
+        
+        if operation_type == "modification":
+            step = calendar_data.get("modification_step", "")
+            if step in ["completed", "error"]:
+                return str(ConversationState.END)
+            else:
+                return str(ConversationState.MODIFY_CALENDAR)
+                
+        elif operation_type == "deletion":
+            step = calendar_data.get("deletion_step", "")
+            if step in ["completed", "cancelled", "error"]:
+                return str(ConversationState.END)
+            else:
+                return str(ConversationState.DELETE_CALENDAR)
+        
+        return str(ConversationState.END)
 
     def chat(self, messages: List[dict], user_preferences: Optional[Dict] = None, current_plan: Optional[Dict] = None) -> dict:
         """Run the travel planner workflow"""
