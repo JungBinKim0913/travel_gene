@@ -3,12 +3,12 @@ from functools import lru_cache
 from dotenv import load_dotenv
 import os
 
-# .env 파일 로드
 load_dotenv()
 
 class Settings(BaseSettings):
     openai_api_key: str = os.getenv("OPENAI_API_KEY")
     google_calendar_api_key: str = os.getenv("GOOGLE_CALENDAR_API_KEY")
+    kakao_api_key: str = os.getenv("KAKAO_API_KEY")
     
     class Config:
         env_file = ".env"
@@ -16,4 +16,6 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings() 
+    return Settings()
+
+settings = get_settings() 
