@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional, Dict
 
 from ..models.travel import ChatMessage
-from ..agents.travel_agent import TravelPlannerAgent
+from ..agents.travel.travel_agent import TravelPlannerAgent
 from ..utils.llm import get_llm
 
 class TravelPlanRequest(BaseModel):

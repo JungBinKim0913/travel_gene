@@ -1,10 +1,17 @@
 import os
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from openai import OpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+_client = None
+
+def get_openai_client():
+    """OpenAI 클라이언트를 가져옵니다."""
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    return _client
 
 def is_openai_model(llm: Any) -> bool:
     """LLM이 OpenAI 모델인지 확인합니다."""
@@ -54,7 +61,7 @@ def request_json_response(
                 "content": f"응답은 반드시 다음 JSON 스키마를 따라야 합니다:\n{json.dumps(json_schema, ensure_ascii=False)}"
             })
         
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model=model,
             messages=messages,
             response_format={"type": "json_object"},

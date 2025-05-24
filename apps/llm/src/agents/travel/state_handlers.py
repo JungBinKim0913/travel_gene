@@ -1,11 +1,10 @@
 from typing import Dict
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from datetime import datetime
-import json
+from .travel_calendar import create_travel_calendar_events
 
 from .types import ConversationState
 from .utils import select_next_question, create_context_message, analyze_preferences, analyze_user_intent
-from .calendar_utils import create_calendar_events
 from .openai_utils import analyze_conversation_with_json_structure
 
 def understand_request(llm, state: Dict) -> Dict:
@@ -413,7 +412,7 @@ def register_calendar(llm, state: Dict) -> Dict:
             "current_step": str(ConversationState.UNDERSTAND_REQUEST)
         }
     
-    calendar_result = create_calendar_events(plan_data)
+    calendar_result = create_travel_calendar_events(plan_data)
     
     if calendar_result["success"]:
         calendar_msg = f"""여행 계획이 Google Calendar에 성공적으로 등록되었습니다.
