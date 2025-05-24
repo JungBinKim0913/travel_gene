@@ -1,7 +1,7 @@
 from typing import Dict
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from datetime import datetime
-from .travel_calendar import (
+from .calendar import (
     register_travel_calendar, 
     view_travel_calendar, 
     handle_calendar_modification,
