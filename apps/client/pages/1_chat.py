@@ -18,6 +18,46 @@ if "show_order_form" not in st.session_state:
     st.session_state.show_order_form = False
 if "auto_process_message" not in st.session_state:
     st.session_state.auto_process_message = False
+if "model_config" not in st.session_state:
+    st.session_state.model_config = {"provider": "openai", "model": "gpt-3.5-turbo-1106"}
+if "show_settings" not in st.session_state:
+    st.session_state.show_settings = False
+
+def get_available_models():
+    """서버에서 사용 가능한 모델 목록 가져오기"""
+    try:
+        response = requests.get("http://localhost:8000/travel/models", timeout=5)
+        if response.status_code == 200:
+            return response.json(), None
+        else:
+            error_msg = f"서버 오류 (상태 코드: {response.status_code})"
+            return None, error_msg
+    except requests.exceptions.Timeout:
+        error_msg = "서버 응답 시간 초과"
+        return None, error_msg
+    except requests.exceptions.ConnectionError:
+        error_msg = "서버에 연결할 수 없습니다"
+        return None, error_msg
+    except Exception as e:
+        error_msg = f"예상치 못한 오류: {str(e)}"
+        return None, error_msg
+
+def update_model_config(provider, model):
+    """서버에 모델 설정 업데이트"""
+    try:
+        response = requests.post(
+            "http://localhost:8000/travel/models/config",
+            json={"provider": provider, "model": model}
+        )
+        if response.status_code == 200:
+            st.session_state.model_config = {"provider": provider, "model": model}
+            return True
+        else:
+            st.error(f"모델 설정 업데이트 실패: {response.text}")
+            return False
+    except Exception as e:
+        st.error(f"서버 연결 오류: {str(e)}")
+        return False
 
 with st.sidebar:
     st.title("💬 채팅 기록")
@@ -50,6 +90,69 @@ with st.sidebar:
             st.session_state.current_thread_id = thread_id
             st.session_state.show_order_form = False
             st.rerun()
+    
+    st.markdown("---")
+    
+    st.markdown("### 🤖 AI 모델 설정")
+    current_config = st.session_state.model_config
+    provider_name = "OpenAI" if current_config["provider"] == "openai" else "Anthropic"
+    st.info(f"**{provider_name}**\n{current_config['model']}")
+    
+    if st.button("⚙️ 모델 변경", use_container_width=True):
+        st.session_state.show_settings = not st.session_state.show_settings
+        st.rerun()
+
+if st.session_state.show_settings:
+    with st.container():
+        st.markdown("### ⚙️ AI 모델 설정")
+        
+        available_models, error_msg = get_available_models()
+        
+        if error_msg:
+            st.error(f"❌ {error_msg}")
+            st.info("💡 서버가 정상 작동할 때 다시 시도해주세요.")
+        elif not available_models:
+            st.error("사용 가능한 모델이 없습니다.")
+        else:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                provider = st.selectbox(
+                    "AI 제공업체 선택",
+                    options=list(available_models.keys()),
+                    index=list(available_models.keys()).index(st.session_state.model_config["provider"]) 
+                    if st.session_state.model_config["provider"] in available_models else 0,
+                    format_func=lambda x: "OpenAI (권장)" if x == "openai" else "Anthropic (Beta)"
+                )
+            
+            with col2:
+                model = st.selectbox(
+                    "모델 선택",
+                    options=available_models[provider],
+                    index=available_models[provider].index(st.session_state.model_config["model"]) 
+                    if st.session_state.model_config["model"] in available_models[provider] else 0
+                )
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("✅ 적용", use_container_width=True):
+                    if update_model_config(provider, model):
+                        st.success("모델 설정이 업데이트되었습니다!")
+                        st.session_state.show_settings = False
+                        st.rerun()
+            
+            with col2:
+                if st.button("❌ 취소", use_container_width=True):
+                    st.session_state.show_settings = False
+                    st.rerun()
+            
+            with col3:
+                current_config = st.session_state.model_config
+                provider_name = "OpenAI" if current_config["provider"] == "openai" else "Anthropic"
+                st.info(f"현재: {provider_name} - {current_config['model']}")
+        
+        st.markdown("---")
 
 st.title("Travel Gene Chat 🗺️")
 
