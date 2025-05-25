@@ -60,8 +60,6 @@ async def stream_response(result: dict):
     if result.get("has_plan"):
         plan_data = result.get("plan", {})
         
-        # 계획 데이터를 클라이언트에 전달
-        # 계획 데이터를 그대로 전달하고 클라이언트에서 처리하도록 수정
         yield f"data: {json.dumps({'has_plan': True, 'plan': plan_data})}\n\n"
     
     yield f"data: {json.dumps({'status': 'complete', 'message': '여행 계획이 완성되었습니다.'})}\n\n"
@@ -109,15 +107,3 @@ async def create_travel_plan(request: TravelPlanRequest):
                 "timestamp": datetime.now().isoformat()
             }
         )
-
-@router.post("/chat")
-async def chat_with_agent(message: ChatMessage):
-    """여행 계획을 위한 대화형 인터페이스"""
-    try:
-        response = ChatMessage(
-            role="assistant",
-            content="아직 구현되지 않았습니다."
-        )
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 

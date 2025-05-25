@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import os
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request

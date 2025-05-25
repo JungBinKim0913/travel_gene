@@ -1,6 +1,5 @@
 from typing import List, Dict, Optional
 from langchain_core.messages import BaseMessage, SystemMessage
-from datetime import datetime
 import json
 
 def select_next_question(pending_questions: List[str], last_topic: str, interaction_history: List[Dict]) -> Optional[str]:

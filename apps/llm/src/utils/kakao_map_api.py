@@ -187,7 +187,6 @@ class KakaoMapAPI:
             "end_places": end_places
         }
 
-
 kakao_map_api = None
 
 def get_kakao_map_api() -> KakaoMapAPI:
