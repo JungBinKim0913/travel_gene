@@ -99,15 +99,17 @@ LLM Application Library를 선택했으니, 가장 잘 맞는 프레임워크를
 </details>
 
 
-<details><summary>UI
-</summary>
-
-*Write here!*
+<details>
+  <summary>UI</summary>
+  * Streamlit에서 제공하는 기본 컴포넌트를 적극적으로 사용하고, 되도록이면 AI의 도움을 받습니다.
 </details>
-<details><summary>IDE
-</summary>
 
-*Write here!*
+
+<details>
+  <summary>IDE</summary>
+  * Cursor를 사용합니다. 
+  * 이유는 현재 AI 백엔드 개발을 주로 하고 있는데, LangGraph와 프론트 개발 경험은 적습니다.
+  * 학습 보다 적절한 아이디어를 통해 AI 개발도구의 도움을 받아 LLM 서비스의 고도화를 이루는 것에 초점을 맞춥니다.
 </details>
 
 
