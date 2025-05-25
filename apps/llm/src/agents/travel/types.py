@@ -3,6 +3,7 @@ from langchain_core.messages import BaseMessage
 from enum import Enum, auto
 
 class ConversationState(Enum):
+    CHECK_GUARDRAIL = auto()
     UNDERSTAND_REQUEST = auto()
     ASK_DESTINATION = auto()
     COLLECT_DETAILS = auto()
