@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import base64
 
 if "chat_history" not in st.session_state:
@@ -160,7 +160,7 @@ if not st.session_state.chat_history:
             )
             end_date = st.date_input(
                 "도착일",
-                value=datetime.now().date(),
+                value=(datetime.now() + timedelta(days=2)).date(),
                 format="YYYY-MM-DD",
                 key="end_date_input"
             )
