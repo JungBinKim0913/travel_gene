@@ -53,12 +53,13 @@ st.markdown("""
         text-align: center;
     }
     
-    /* 다크모드/라이트모드 대응 */
     :root {
         --background-color: #ffffff;
         --secondary-background-color: #f8f9fa;
         --text-color: #000000;
         --border-color: #e0e0e0;
+        --muted-text-color: #666666;
+        --light-text-color: #888888;
     }
     
     @media (prefers-color-scheme: dark) {
@@ -67,15 +68,18 @@ st.markdown("""
             --secondary-background-color: #3d3d3d;
             --text-color: #ffffff;
             --border-color: #4d4d4d;
+            --muted-text-color: #cccccc;
+            --light-text-color: #aaaaaa;
         }
     }
     
-    /* Streamlit 다크테마 감지 */
     .stApp[data-theme="dark"] {
         --background-color: #2d2d2d;
         --secondary-background-color: #3d3d3d;
         --text-color: #ffffff;
         --border-color: #4d4d4d;
+        --muted-text-color: #cccccc;
+        --light-text-color: #aaaaaa;
     }
     
     .stApp[data-theme="light"] {
@@ -83,9 +87,10 @@ st.markdown("""
         --secondary-background-color: #f8f9fa;
         --text-color: #000000;
         --border-color: #e0e0e0;
+        --muted-text-color: #666666;
+        --light-text-color: #888888;
     }
     
-    /* 강제 다크모드 스타일 (Streamlit 다크테마용) */
     .stApp {
         color-scheme: light dark;
     }
@@ -96,7 +101,6 @@ st.markdown("""
 </style>
 
 <script>
-// Streamlit 테마 감지 및 CSS 변수 업데이트
 function updateTheme() {
     const stApp = document.querySelector('.stApp');
     const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches ||
@@ -110,19 +114,21 @@ function updateTheme() {
         root.style.setProperty('--secondary-background-color', '#3d3d3d');
         root.style.setProperty('--text-color', '#ffffff');
         root.style.setProperty('--border-color', '#4d4d4d');
+        root.style.setProperty('--muted-text-color', '#cccccc');
+        root.style.setProperty('--light-text-color', '#aaaaaa');
     } else {
         root.style.setProperty('--background-color', '#ffffff');
         root.style.setProperty('--secondary-background-color', '#f8f9fa');
         root.style.setProperty('--text-color', '#000000');
         root.style.setProperty('--border-color', '#e0e0e0');
+        root.style.setProperty('--muted-text-color', '#666666');
+        root.style.setProperty('--light-text-color', '#888888');
     }
 }
 
-// 페이지 로드시 및 테마 변경시 실행
 document.addEventListener('DOMContentLoaded', updateTheme);
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
 
-// MutationObserver로 Streamlit 테마 변경 감지
 const observer = new MutationObserver(updateTheme);
 observer.observe(document.body, { 
     attributes: true, 
@@ -130,7 +136,6 @@ observer.observe(document.body, {
     subtree: true 
 });
 
-// 초기 실행
 setTimeout(updateTheme, 100);
 </script>
 """, unsafe_allow_html=True)
@@ -169,6 +174,17 @@ def parse_plan_info(plan):
         'activities': [],
         'content': ''
     }
+    
+    if 'plan_data' in plan and isinstance(plan['plan_data'], dict):
+        plan_data = plan['plan_data']
+        
+        if 'travel_overview' in plan_data:
+            overview = plan_data['travel_overview']
+            info['destination'] = overview.get('destination', '여행지 미정')
+            info['start_date'] = overview.get('start_date', '미정')
+            info['end_date'] = overview.get('end_date', '미정')
+        
+        return info
     
     if 'collected_info' in plan:
         collected = plan['collected_info']
@@ -380,18 +396,20 @@ def render_llm_trip_header(plan_info):
     else:
         date_display = "미정"
     
+    activities_display = '・'.join(plan_info['activities']) if plan_info['activities'] else '일반 여행'
+    
     st.markdown(f"""
     <div class="trip-card">
         <h1>🗺️ {destination} 여행</h1>
-        <div class="trip-stats">
-            <div class="stat-item">
-                <p>📅 {date_display}</p>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
             </div>
-            <div class="stat-item">
-                <p>🎯 {'・'.join(plan_info['activities']) if plan_info['activities'] else '일반 여행'}</p>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {days_count}일
             </div>
-            <div class="stat-item">
-                <p>📍 {days_count}일 일정</p>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>🎯 여행 활동:</strong> {activities_display}
             </div>
         </div>
     </div>
@@ -470,21 +488,23 @@ def render_trip_header(plan):
     
     itinerary_count = len(plan.get('itinerary', []))
     
+    if start_date != '미정' and end_date != '미정':
+        date_display = f"{start_date} ~ {end_date}"
+    else:
+        date_display = "미정"
+    
     st.markdown(f"""
     <div class="trip-card">
         <h1>🗺️ {destination} 여행</h1>
-        <div class="trip-stats">
-            <div class="stat-item">
-                <h3>📅</h3>
-                <p>{start_date} ~ {end_date}</p>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
             </div>
-            <div class="stat-item">
-                <h3>💰</h3>
-                <p>{budget}만원</p>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>💰 여행 예산:</strong> {budget}만원
             </div>
-            <div class="stat-item">
-                <h3>📍</h3>
-                <p>{itinerary_count}일 일정</p>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {itinerary_count}일
             </div>
         </div>
     </div>
@@ -713,6 +733,165 @@ def render_share_options(plan):
     elif email_clicked:
         st.info("📧 이메일 전송 기능은 개발 예정입니다.")
 
+def render_json_trip_header(plan_data):
+    """JSON 계획 정보로 헤더 렌더링"""
+    if 'travel_overview' not in plan_data:
+        return
+    
+    overview = plan_data['travel_overview']
+    destination = overview.get('destination', '여행지 미정')
+    start_date = overview.get('start_date', '미정')
+    end_date = overview.get('end_date', '미정')
+    duration_days = overview.get('duration_days', 0)
+    summary = overview.get('summary', '')
+    
+    if start_date != '미정' and end_date != '미정':
+        date_display = f"{start_date} ~ {end_date}"
+    else:
+        date_display = "미정"
+    
+    st.markdown(f"""
+    <div class="trip-card">
+        <h1>🗺️ {destination} 여행</h1>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
+            </div>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {duration_days}일
+            </div>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>✨ 여행 컨셉:</strong> {summary if summary else '맞춤형 여행'}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_json_itinerary(itinerary_data):
+    """JSON 형식 일정 렌더링"""
+    for day_num, day_plan in enumerate(itinerary_data, 1):
+        date = day_plan.get('date', '')
+        day_of_week = day_plan.get('day_of_week', '')
+        date_display = f"{date} ({day_of_week})" if day_of_week else date
+        
+        st.markdown(f"""
+        <div class="day-card">
+            <h3>🌅 {day_num}일차 - {date_display}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        activities = day_plan.get('activities', [])
+        for activity in activities:
+            time = activity.get('time', '').strip()
+            title = activity.get('title', '').strip()
+            location = activity.get('location', '').strip()
+            address = activity.get('address', '').strip()
+            description = activity.get('description', '').strip()
+            category = activity.get('category', '').strip()
+            
+            def get_category_icon(category):
+                icon_map = {
+                    '식사': '🍽️',
+                    '관광': '🎯',
+                    '숙박': '🏨',
+                    '이동': '🚗',
+                    '쇼핑': '🛍️',
+                    '휴식': '😌'
+                }
+                return icon_map.get(category, '📍')
+            
+            activity_icon = get_category_icon(category)
+            
+            should_show_time = time and time.strip()
+            
+            if should_show_time:
+                main_section = f"<div style='margin-bottom: 4px; color: var(--text-color);'><div style='margin-bottom: 2px;'><strong>⏰ {time}</strong></div><div><strong>{activity_icon} {title}</strong></div></div>"
+            else:
+                main_section = f"<div style='margin-bottom: 20px; color: var(--text-color);'><strong>{activity_icon} {title}</strong></div>"
+            
+            location_section = ""
+            if location and address:
+                location_section = f"<div style='margin-bottom: 4px; color: var(--text-color); opacity: 0.7; font-size: 14px;'>📍 {location} - {address}</div>"
+            elif location:
+                location_section = f"<div style='margin-bottom: 4px; color: var(--text-color); opacity: 0.7; font-size: 14px;'>📍 {location}</div>"
+            elif address:
+                location_section = f"<div style='margin-bottom: 4px; color: var(--text-color); opacity: 0.7; font-size: 14px;'>📍 {address}</div>"
+            
+            description_section = ""
+            if description:
+                description_section = f"<div style='font-size: 13px; color: var(--text-color); opacity: 0.6;'>{description}</div>"
+            
+            activity_html = f"""
+            <div class="activity-item">
+                {main_section}
+                {location_section}
+                {description_section}
+            </div>
+            """
+            
+            st.markdown(activity_html, unsafe_allow_html=True)
+
+def render_json_additional_info(plan_data):
+    """JSON 형식 추가 정보 렌더링"""
+    if 'preparation' in plan_data:
+        prep = plan_data['preparation']
+        st.markdown("### 🎒 준비사항")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if 'essential_items' in prep and prep['essential_items']:
+                st.markdown("**🎁 필수 준비물:**")
+                for item in prep['essential_items']:
+                    st.markdown(f"• {item}")
+            
+            if 'reservations_needed' in prep and prep['reservations_needed']:
+                st.markdown("**📞 사전 예약 필요:**")
+                for reservation in prep['reservations_needed']:
+                    st.markdown(f"• {reservation}")
+        
+        with col2:
+            if 'local_tips' in prep and prep['local_tips']:
+                st.markdown("**💡 현지 정보:**")
+                for tip in prep['local_tips']:
+                    st.markdown(f"• {tip}")
+            
+            if 'warnings' in prep and prep['warnings']:
+                st.markdown("**⚠️ 주의사항:**")
+                for warning in prep['warnings']:
+                    st.markdown(f"• {warning}")
+    
+    if 'alternatives' in plan_data:
+        alt = plan_data['alternatives']
+        st.markdown("### 🌦️ 대체 옵션")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if 'rainy_day_options' in alt and alt['rainy_day_options']:
+                st.markdown("**☔ 우천시 대체 장소:**")
+                for option in alt['rainy_day_options']:
+                    st.markdown(f"• {option}")
+        
+        with col2:
+            if 'optional_activities' in alt and alt['optional_activities']:
+                st.markdown("**✨ 선택적 추가 활동:**")
+                for activity in alt['optional_activities']:
+                    st.markdown(f"• {activity}")
+
+def render_json_content(plan_data):
+    """JSON 형식 계획 내용 렌더링"""
+    st.markdown("## 📋 여행 계획")
+    
+    if 'itinerary' in plan_data and plan_data['itinerary']:
+        st.markdown("### 📅 여행 일정")
+        render_json_itinerary(plan_data['itinerary'])
+        
+        st.markdown("---")
+        render_json_additional_info(plan_data)
+    else:
+        st.info("📝 여행 일정 정보가 없습니다.")
+
 st.title("🌐 여행 공유")
 
 shared_plan = decode_plan_from_url()
@@ -720,7 +899,13 @@ shared_plan = decode_plan_from_url()
 if shared_plan:
     st.success("🎉 공유된 여행 계획을 불러왔습니다!")
     
-    if 'content' in shared_plan and 'collected_info' in shared_plan:
+    if 'plan_data' in shared_plan and isinstance(shared_plan['plan_data'], dict):
+        plan_data = shared_plan['plan_data']
+        
+        render_json_trip_header(plan_data)
+        render_json_content(plan_data)
+        
+    elif 'content' in shared_plan and 'collected_info' in shared_plan:
         plan_info = parse_plan_info(shared_plan)
         
         render_llm_trip_header(plan_info)
@@ -768,7 +953,13 @@ elif 'current_plan' in st.session_state and st.session_state.current_plan:
     with st.expander("🔍 계획 데이터 확인 (디버깅용)", expanded=False):
         st.json(plan)
     
-    if 'content' in plan and 'collected_info' in plan:
+    if 'plan_data' in plan and isinstance(plan['plan_data'], dict):
+        plan_data = plan['plan_data']
+        
+        render_json_trip_header(plan_data)
+        render_json_content(plan_data)
+        
+    elif 'content' in plan and 'collected_info' in plan:
         plan_info = parse_plan_info(plan)
         
         render_llm_trip_header(plan_info)

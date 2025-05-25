@@ -379,94 +379,122 @@ def generate_plan(llm, state: Dict) -> Dict:
             real_places_info = "\n\n⚠️ 실시간 장소 정보 검색에 일시적인 문제가 발생했습니다. 일반적인 추천 정보를 제공합니다.\n"
 
     if places_found:
-        plan_instruction = f"""{collected_info}{real_places_info}
+        plan_instruction = f"""{collected_info}
 
-위 정보를 바탕으로 여행 계획을 생성해주세요. 
+위 정보를 바탕으로 수집된 실제 장소 정보를 활용하여 여행 계획을 생성해주세요:
 
-**중요:** 실제 추천 장소 정보가 제공된 경우, 해당 장소들을 우선적으로 활용하여 구체적이고 실현 가능한 일정을 작성해주세요.
+{real_places_info}
 
-응답은 다음 형식으로 작성해주세요:
+**중요: 응답을 반드시 다음 JSON 형식으로 작성해주세요. 다른 텍스트 없이 JSON만 반환해주세요:**
 
-1. 여행 개요
-   - 기간
-   - 목적지  
-   - 주요 일정 개요
+{{
+  "travel_overview": {{
+    "destination": "목적지명",
+    "start_date": "YYYY-MM-DD",
+    "end_date": "YYYY-MM-DD", 
+    "duration_days": 숫자,
+    "summary": "여행 개요 설명"
+  }},
+  "itinerary": [
+    {{
+      "date": "YYYY-MM-DD",
+      "day_of_week": "요일",
+      "activities": [
+        {{
+          "time": "HH:MM",
+          "title": "활동명",
+          "location": "장소명",
+          "address": "실제 주소",
+          "description": "활동 설명",
+          "category": "식사|관광|숙박|이동|쇼핑|휴식",
+          "duration_minutes": 예상소요시간(분)
+        }}
+      ]
+    }}
+  ],
+  "preparation": {{
+    "essential_items": ["필수 준비물 목록"],
+    "reservations_needed": ["사전 예약 필요 사항"],
+    "local_tips": ["현지 정보"],
+    "warnings": ["주의사항"]
+  }},
+  "alternatives": {{
+    "rainy_day_options": ["우천시 대체 장소"],
+    "optional_activities": ["선택적 추가 활동"]
+  }}
+}}
 
-2. 일자별 세부 일정
-   [각 일자별로]
-   - 날짜와 요일
-   - 시간대별 활동 계획
-    - 10:00 - 활동명 (실제 장소명과 주소 포함)
-    - 11:00 - 활동명 (실제 장소명과 주소 포함)
-    - 12:00 - 활동명 (실제 장소명과 주소 포함)
-    - 13:00 - 활동명 (실제 장소명과 주소 포함)
-    - 14:00 - 활동명 (실제 장소명과 주소 포함)
-    - 15:00 - 활동명 (실제 장소명과 주소 포함)
-    - 16:00 - 활동명 (실제 장소명과 주소 포함)
-   - 이동 수단 및 소요 시간
-   - 식사 계획 (실제 맛집 정보 활용)
-
-3. 준비사항
-   - 필수 준비물
-   - 사전 예약 필요 사항 (실제 장소의 전화번호 포함)
-   - 현지 정보
-   - 주의사항
-   - 추천 사항
-
-4. 대체 옵션
-   - 우천시 대체 일정
-   - 선택적 추가 활동
-
-**참고:** 실제 장소 정보를 최대한 활용하여 구체적이고 실용적인 계획을 작성해주세요."""
+**참고:** 실제 수집된 장소 정보를 최대한 활용하여 구체적이고 실용적인 계획을 JSON 형식으로 작성해주세요."""
     else:
         plan_instruction = f"""{collected_info}
 
 위 정보를 바탕으로 여행 계획을 생성해주세요. 부족한 정보는 일반적인 선호도를 반영하여 채워주세요.
 
-응답은 다음 형식으로 작성해주세요:
+**중요: 응답을 반드시 다음 JSON 형식으로 작성해주세요. 다른 텍스트 없이 JSON만 반환해주세요:**
 
-1. 여행 개요
-   - 기간
-   - 목적지
-   - 주요 일정 개요
-
-2. 일자별 세부 일정
-   [각 일자별로]
-   - 날짜와 요일
-   - 시간대별 활동 계획
-    - 10:00 - 활동명
-    - 11:00 - 활동명
-    - 12:00 - 활동명
-    - 13:00 - 활동명
-    - 14:00 - 활동명
-    - 15:00 - 활동명
-    - 16:00 - 활동명
-   - 이동 수단 및 소요 시간
-   - 식사 계획
-
-3. 준비사항
-   - 필수 준비물
-   - 사전 예약 필요 사항
-   - 현지 정보
-   - 주의사항
-   - 추천 사항
-
-4. 대체 옵션
-   - 우천시 대체 일정
-   - 선택적 추가 활동"""
+{{
+  "travel_overview": {{
+    "destination": "목적지명",
+    "start_date": "YYYY-MM-DD",
+    "end_date": "YYYY-MM-DD",
+    "duration_days": 숫자,
+    "summary": "여행 개요 설명"
+  }},
+  "itinerary": [
+    {{
+      "date": "YYYY-MM-DD", 
+      "day_of_week": "요일",
+      "activities": [
+        {{
+          "time": "HH:MM",
+          "title": "활동명",
+          "location": "장소명", 
+          "address": "주소",
+          "description": "활동 설명",
+          "category": "식사|관광|숙박|이동|쇼핑|휴식",
+          "duration_minutes": 예상소요시간(분)
+        }}
+      ]
+    }}
+  ],
+  "preparation": {{
+    "essential_items": ["필수 준비물 목록"],
+    "reservations_needed": ["사전 예약 필요 사항"], 
+    "local_tips": ["현지 정보"],
+    "warnings": ["주의사항"]
+  }},
+  "alternatives": {{
+    "rainy_day_options": ["우천시 대체 장소"],
+    "optional_activities": ["선택적 추가 활동"]
+  }}
+}}"""
 
     messages.append(SystemMessage(content=plan_instruction))
 
     response = llm.invoke(messages)
     messages.append(response)
     
-    plan_metadata = {
-        "generated_at": "generate_plan",
-        "content": response.content,
-        "collected_info": collected_info,
-        "kakao_places_used": places_found,
-        "places_count": sum(len(places) for places in places_by_preference.values()) if places_found else 0
-    }
+    try:
+        import json
+        plan_json = json.loads(response.content.strip())
+        
+        plan_metadata = {
+            "generated_at": "generate_plan",
+            "plan_data": plan_json,
+            "collected_info": collected_info,
+            "kakao_places_used": places_found,
+            "places_count": sum(len(places) for places in places_by_preference.values()) if places_found else 0,
+            "format": "json"
+        }
+    except json.JSONDecodeError as e:
+        plan_metadata = {
+            "generated_at": "generate_plan",
+            "content": response.content,
+            "collected_info": collected_info,
+            "kakao_places_used": places_found,
+            "places_count": sum(len(places) for places in places_by_preference.values()) if places_found else 0,
+            "format": "text"
+        }
     
     return {
         **state,
@@ -481,12 +509,10 @@ def refine_plan(llm, state: Dict) -> Dict:
     plan_data = state.get("plan_data", {})
     conversation_state = state.get("conversation_state", {})
     
-    # 기존 계획이 카카오 API를 사용했는지 확인
     used_kakao_before = plan_data.get("kakao_places_used", False)
     destination = conversation_state.get('destination', '미정')
     preferences = conversation_state.get('preferences', [])
     
-    # 추가 장소 정보 제공 (사용자가 새로운 요청을 했을 때)
     additional_places_info = ""
     
     if destination != '미정' and preferences and not used_kakao_before:
@@ -535,7 +561,6 @@ def refine_plan(llm, state: Dict) -> Dict:
     response = llm.invoke(messages)
     messages.append(response)
     
-    # 수정된 계획 메타데이터
     refined_metadata = {
         "generated_at": "refine_plan",
         "content": response.content,

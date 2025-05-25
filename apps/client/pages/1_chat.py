@@ -66,7 +66,173 @@ def generate_share_url(plan_data):
     
     return share_url
 
-# 채팅 기록이 없을 때 안내 메시지 표시
+def render_json_plan_card(plan_data):
+    """JSON 형식 여행 계획을 카드 형태로 렌더링"""
+    if not isinstance(plan_data, dict) or 'plan_data' not in plan_data:
+        return
+    
+    st.markdown("""
+    <style>
+    :root {
+        --card-bg-color: #ffffff;
+        --card-text-color: #000000;
+        --card-border-color: #e0e0e0;
+        --day-card-bg: #f8f9fa;
+        --activity-card-bg: #ffffff;
+        --location-text-color: #666666;
+        --description-text-color: #888888;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --card-bg-color: #2d2d2d;
+            --card-text-color: #ffffff;
+            --card-border-color: #4d4d4d;
+            --day-card-bg: #3d3d3d;
+            --activity-card-bg: #2d2d2d;
+            --location-text-color: #cccccc;
+            --description-text-color: #aaaaaa;
+        }
+    }
+    
+    .stApp[data-theme="dark"] {
+        --card-bg-color: #2d2d2d;
+        --card-text-color: #ffffff;
+        --card-border-color: #4d4d4d;
+        --day-card-bg: #3d3d3d;
+        --activity-card-bg: #2d2d2d;
+        --location-text-color: #cccccc;
+        --description-text-color: #aaaaaa;
+    }
+    
+    .stApp[data-theme="light"] {
+        --card-bg-color: #ffffff;
+        --card-text-color: #000000;
+        --card-border-color: #e0e0e0;
+        --day-card-bg: #f8f9fa;
+        --activity-card-bg: #ffffff;
+        --location-text-color: #666666;
+        --description-text-color: #888888;
+    }
+    
+    /* 카드 스타일 개선 */
+    .plan-card {
+        background: var(--activity-card-bg);
+        color: var(--card-text-color);
+        border: 1px solid var(--card-border-color);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .day-header {
+        background: var(--day-card-bg);
+        color: var(--card-text-color);
+        border: 1px solid var(--card-border-color);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    json_plan = plan_data['plan_data']
+    
+    if 'travel_overview' in json_plan:
+        overview = json_plan['travel_overview']
+        destination = overview.get('destination', '미정')
+        start_date = overview.get('start_date', '미정')
+        end_date = overview.get('end_date', '미정')
+        duration_days = overview.get('duration_days', 0)
+        summary = overview.get('summary', '')
+        
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 15px; color: white; margin: 10px 0;">
+            <h2>🗺️ {destination} 여행</h2>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 12px; font-size: 16px;">
+                    <strong>📅 여행 기간:</strong> {start_date} ~ {end_date}
+                </div>
+                <div style="margin-bottom: 12px; font-size: 16px;">
+                    <strong>📍 여행 일정:</strong> {duration_days}일
+                </div>
+                <div style="margin-bottom: 8px; font-size: 16px;">
+                    <strong>✨ 여행 컨셉:</strong> {summary if summary else '맞춤형 여행'}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    if 'itinerary' in json_plan and json_plan['itinerary']:
+        st.markdown("### 📅 여행 일정")
+        
+        for day_num, day_plan in enumerate(json_plan['itinerary'], 1):
+            date = day_plan.get('date', '')
+            day_of_week = day_plan.get('day_of_week', '')
+            date_display = f"{date} ({day_of_week})" if day_of_week else date
+            
+            st.markdown(f"""
+            <div style="background: var(--day-card-bg); color: var(--card-text-color); padding: 15px; border-radius: 10px; margin: 10px 0; border-left: 4px solid #667eea;">
+                <h4>🌅 {day_num}일차 - {date_display}</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            activities = day_plan.get('activities', [])
+            for activity in activities:
+                time = activity.get('time', '').strip()
+                title = activity.get('title', '').strip()
+                location = activity.get('location', '').strip()
+                address = activity.get('address', '').strip()
+                description = activity.get('description', '').strip()
+                category = activity.get('category', '').strip()
+                
+                icon_map = {
+                    '식사': '🍽️',
+                    '관광': '🎯',
+                    '숙박': '🏨',
+                    '이동': '🚗',
+                    '쇼핑': '🛍️',
+                    '휴식': '😌'
+                }
+                activity_icon = icon_map.get(category, '📍')
+                
+                time_section = f"<div style='margin-bottom: 2px; color: var(--card-text-color);'><strong>⏰ {time}</strong></div>" if time else ""
+                
+                title_section = f"<div style='margin-bottom: 4px; color: var(--card-text-color);'><strong>{activity_icon} {title}</strong></div>"
+                
+                location_section = ""
+                if location and address:
+                    location_section = f"<div style='color: var(--location-text-color); font-size: 14px; margin-bottom: 4px;'>📍 {location} - {address}</div>"
+                elif location:
+                    location_section = f"<div style='color: var(--location-text-color); font-size: 14px; margin-bottom: 4px;'>📍 {location}</div>"
+                elif address:
+                    location_section = f"<div style='color: var(--location-text-color); font-size: 14px; margin-bottom: 4px;'>📍 {address}</div>"
+                
+                description_section = f"<div style='font-size: 13px; color: var(--description-text-color);'>{description}</div>" if description else ""
+                
+                st.markdown(f"""
+                <div style="background: var(--activity-card-bg); color: var(--card-text-color); padding: 12px; border-radius: 8px; margin: 8px 0; border-left: 3px solid #28a745; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid var(--card-border-color);">
+                    {time_section}
+                    {title_section}
+                    {location_section}
+                    {description_section}
+                </div>
+                """, unsafe_allow_html=True)
+    
+    additional_info = []
+    if 'preparation' in json_plan:
+        prep = json_plan['preparation']
+        if prep.get('essential_items'):
+            additional_info.append(f"🎒 **준비물:** {', '.join(prep['essential_items'][:3])}{'...' if len(prep['essential_items']) > 3 else ''}")
+    
+    if 'alternatives' in json_plan:
+        alt = json_plan['alternatives']
+        if alt.get('rainy_day_options'):
+            additional_info.append(f"☔ **우천시:** {', '.join(alt['rainy_day_options'][:2])}{'...' if len(alt['rainy_day_options']) > 2 else ''}")
+    
+    if additional_info:
+        st.markdown("### 📝 추가 정보")
+        for info in additional_info:
+            st.markdown(info)
+
 if not st.session_state.chat_history:
     st.markdown("""
     <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white; margin-bottom: 20px;'>
@@ -219,7 +385,8 @@ if not st.session_state.chat_history:
             
             start_message += """
 
-이 주문서를 바탕으로 여행을 계획해드릴까요? 추가로 알고 싶으신 점이나 특별히 원하시는 것이 있다면 말씀해 주세요."""
+이 주문서를 바탕으로 여행을 계획해드릴까요? 
+추가로 알고 싶으신 점이나 특별히 원하시는 것이 있다면 말씀해 주세요."""
 
             st.session_state.chat_history.append({
                 "role": "assistant",
@@ -230,7 +397,6 @@ if not st.session_state.chat_history:
             st.session_state.show_order_form = False
             st.rerun()
 
-# 채팅 기록이 있을 때는 기존대로 표시
 else:
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
@@ -252,7 +418,6 @@ if st.session_state.current_plan:
         if st.button("🌐 계획 공유하기", key="share_plan_button", type="primary"):
             st.switch_page("pages/2_share.py")
     
-    # 공유 링크가 생성되었을 때 전체 폭으로 표시
     if st.session_state.get('show_share_link', False):
         share_url = generate_share_url(st.session_state.current_plan)
         if share_url:
@@ -262,7 +427,7 @@ if st.session_state.current_plan:
     st.info("💡 '계획 공유하기' 버튼을 누르면 예쁜 공유 페이지로 이동합니다!")
     
     with st.expander("🔍 계획 데이터 확인 (상세보기)", expanded=False):
-        st.json(st.session_state.current_plan)
+        render_json_plan_card(st.session_state.current_plan)
     
     st.markdown("---")
 
@@ -296,7 +461,7 @@ def process_ai_response():
                 "Accept": "text/event-stream"
             }
             
-            with thinking_msg.status("🤔 생각 중...") as status:
+            with thinking_msg.status("🤔 맞춤형 여행을 위해 트래블 지니는 생각 중...") as status:
                 status.write("여행 계획을 세우고 있습니다...")
                 
                 try:
@@ -352,7 +517,19 @@ def process_ai_response():
                                             status.write("응답을 작성하고 있습니다...")
                                         
                                         if 'has_plan' in data and data['has_plan']:
-                                            st.session_state.current_plan = data.get('plan', {})
+                                            plan_data = data.get('plan', {})
+                                            
+                                            # JSON 형식 계획 데이터 처리
+                                            if isinstance(plan_data, dict) and 'plan_data' in plan_data:
+                                                # 이미 JSON 구조로 되어있는 경우
+                                                st.session_state.current_plan = plan_data
+                                            elif isinstance(plan_data, dict) and 'format' in plan_data and plan_data['format'] == 'json':
+                                                # JSON 형식으로 표시된 경우
+                                                st.session_state.current_plan = plan_data
+                                            else:
+                                                # 기존 텍스트 형식 또는 기타 형식
+                                                st.session_state.current_plan = plan_data
+                                            
                                             status.update(label="🎉 여행 계획이 완성되었습니다!", state="complete")
                                             plan_completed = True 
                                             
@@ -365,10 +542,26 @@ def process_ai_response():
                                         break
                         
                         if full_response and not has_error:
-                            st.session_state.chat_history.append({
-                                "role": "assistant",
-                                "content": full_response
-                            })
+                            if full_response.strip().startswith('{') and full_response.strip().endswith('}'):
+                                try:
+                                    json.loads(full_response.strip())
+                                    user_friendly_message = "✨ 맞춤형 여행 계획을 생성했습니다! 아래에서 자세한 일정을 확인해보세요."
+                                    message_placeholder.markdown(user_friendly_message)
+                                    
+                                    st.session_state.chat_history.append({
+                                        "role": "assistant",
+                                        "content": user_friendly_message
+                                    })
+                                except json.JSONDecodeError:
+                                    st.session_state.chat_history.append({
+                                        "role": "assistant",
+                                        "content": full_response
+                                    })
+                            else:
+                                st.session_state.chat_history.append({
+                                    "role": "assistant",
+                                    "content": full_response
+                                })
                             
                             if plan_completed:
                                 st.rerun()
@@ -403,7 +596,6 @@ def process_ai_response():
             if not plan_completed and (has_error or full_response):
                 thinking_msg.empty()
 
-# 자동 처리 플래그 확인
 if st.session_state.auto_process_message:
     st.session_state.auto_process_message = False
     process_ai_response()
