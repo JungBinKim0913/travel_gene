@@ -147,11 +147,17 @@ def render_json_plan_card(plan_data):
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 15px; color: white; margin: 10px 0;">
             <h2>🗺️ {destination} 여행</h2>
-            <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-                <div><strong>📅 기간:</strong> {start_date} ~ {end_date}</div>
-                <div><strong>📍 일정:</strong> {duration_days}일</div>
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 12px; font-size: 16px;">
+                    <strong>📅 여행 기간:</strong> {start_date} ~ {end_date}
+                </div>
+                <div style="margin-bottom: 12px; font-size: 16px;">
+                    <strong>📍 여행 일정:</strong> {duration_days}일
+                </div>
+                <div style="margin-bottom: 8px; font-size: 16px;">
+                    <strong>✨ 여행 컨셉:</strong> {summary if summary else '맞춤형 여행'}
+                </div>
             </div>
-            {f'<p style="margin-top: 10px; font-style: italic;">✨ {summary}</p>' if summary else ''}
         </div>
         """, unsafe_allow_html=True)
     

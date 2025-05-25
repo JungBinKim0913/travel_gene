@@ -396,18 +396,20 @@ def render_llm_trip_header(plan_info):
     else:
         date_display = "미정"
     
+    activities_display = '・'.join(plan_info['activities']) if plan_info['activities'] else '일반 여행'
+    
     st.markdown(f"""
     <div class="trip-card">
         <h1>🗺️ {destination} 여행</h1>
-        <div class="trip-stats">
-            <div class="stat-item">
-                <p>📅 {date_display}</p>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
             </div>
-            <div class="stat-item">
-                <p>🎯 {'・'.join(plan_info['activities']) if plan_info['activities'] else '일반 여행'}</p>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {days_count}일
             </div>
-            <div class="stat-item">
-                <p>📍 {days_count}일 일정</p>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>🎯 여행 활동:</strong> {activities_display}
             </div>
         </div>
     </div>
@@ -486,21 +488,23 @@ def render_trip_header(plan):
     
     itinerary_count = len(plan.get('itinerary', []))
     
+    if start_date != '미정' and end_date != '미정':
+        date_display = f"{start_date} ~ {end_date}"
+    else:
+        date_display = "미정"
+    
     st.markdown(f"""
     <div class="trip-card">
         <h1>🗺️ {destination} 여행</h1>
-        <div class="trip-stats">
-            <div class="stat-item">
-                <h3>📅</h3>
-                <p>{start_date} ~ {end_date}</p>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
             </div>
-            <div class="stat-item">
-                <h3>💰</h3>
-                <p>{budget}만원</p>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>💰 여행 예산:</strong> {budget}만원
             </div>
-            <div class="stat-item">
-                <h3>📍</h3>
-                <p>{itinerary_count}일 일정</p>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {itinerary_count}일
             </div>
         </div>
     </div>
@@ -749,15 +753,15 @@ def render_json_trip_header(plan_data):
     st.markdown(f"""
     <div class="trip-card">
         <h1>🗺️ {destination} 여행</h1>
-        <div class="trip-stats">
-            <div class="stat-item">
-                <p>📅 {date_display}</p>
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📅 여행 기간:</strong> {date_display}
             </div>
-            <div class="stat-item">
-                <p>📍 {duration_days}일 일정</p>
+            <div style="margin-bottom: 12px; font-size: 16px;">
+                <strong>📍 여행 일정:</strong> {duration_days}일
             </div>
-            <div class="stat-item">
-                <p>✨ {summary}</p>
+            <div style="margin-bottom: 8px; font-size: 16px;">
+                <strong>✨ 여행 컨셉:</strong> {summary if summary else '맞춤형 여행'}
             </div>
         </div>
     </div>
