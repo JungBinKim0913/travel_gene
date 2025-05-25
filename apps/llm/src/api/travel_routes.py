@@ -9,15 +9,74 @@ from typing import Optional, Dict
 
 from ..models.travel import ChatMessage
 from ..agents.travel.travel_agent import TravelPlannerAgent
-from ..utils.llm import get_llm
+from ..utils.llm import get_llm, get_available_models
 
 class TravelPlanRequest(BaseModel):
     messages: List[ChatMessage]
     user_preferences: Optional[Dict] = None
     current_plan: Optional[Dict] = None
+    llm_config: Optional[Dict] = None
+
+class ModelConfig(BaseModel):
+    provider: str
+    model: str
 
 router = APIRouter(prefix="/travel", tags=["travel"])
-agent = TravelPlannerAgent(llm=get_llm())
+
+current_model_config = {"provider": "openai", "model": "gpt-3.5-turbo-1106"}
+
+def get_current_agent():
+    """현재 모델 설정을 사용하여 TravelPlannerAgent 인스턴스 반환"""
+    global current_model_config
+    
+    try:
+        llm = get_llm(
+            provider=current_model_config["provider"], 
+            model=current_model_config["model"]
+        )
+        return TravelPlannerAgent(llm=llm)
+    except ValueError as e:
+        available_models = get_available_models()
+        for provider, models in available_models.items():
+            if models:
+                try:
+                    llm = get_llm(provider=provider, model=models[0])
+                    current_model_config = {"provider": provider, "model": models[0]}
+                    return TravelPlannerAgent(llm=llm)
+                except ValueError:
+                    continue
+        raise HTTPException(
+            status_code=500,
+            detail="사용 가능한 AI 모델이 없습니다. API 키를 확인해주세요."
+        )
+
+@router.get("/models")
+async def get_models():
+    """사용 가능한 모델 목록 반환"""
+    return get_available_models()
+
+@router.post("/models/config")
+async def set_model_config(config: ModelConfig):
+    """모델 설정 변경"""
+    global current_model_config
+    available_models = get_available_models()
+    
+    if config.provider not in available_models:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported provider: {config.provider}. 사용 가능한 제공업체: {list(available_models.keys())}"
+        )
+    
+    if config.model not in available_models[config.provider]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported model: {config.model} for provider: {config.provider}"
+        )
+
+@router.get("/models/config")
+async def get_model_config():
+    """현재 모델 설정 반환"""
+    return current_model_config
 
 async def stream_response(result: dict):
     """스트리밍 응답 생성기"""
@@ -87,6 +146,8 @@ async def create_travel_plan(request: TravelPlanRequest):
                 "timestamp": datetime.now().isoformat()
             }
             message_dicts.insert(0, preferences_msg)
+        
+        agent = get_current_agent()
         
         result = agent.chat(
             message_dicts, 
