@@ -82,6 +82,18 @@ def understand_request(llm, state: Dict) -> Dict:
                 "context_keywords": set(),
                 "interaction_history": []
             }
+        else:
+            # 기존 conversation_state가 있으면 기본값만 보완
+            conversation_state.setdefault("destination", None)
+            conversation_state.setdefault("travel_dates", None)
+            conversation_state.setdefault("duration", None)
+            conversation_state.setdefault("preferences", [])
+            conversation_state.setdefault("details_collected", False)
+            conversation_state.setdefault("last_topic", None)
+            conversation_state.setdefault("pending_questions", [])
+            conversation_state.setdefault("confirmed_info", set())
+            conversation_state.setdefault("context_keywords", set())
+            conversation_state.setdefault("interaction_history", [])
         
         if not any(isinstance(msg, SystemMessage) for msg in messages):
             messages.insert(0, SystemMessage(content="""여행 계획을 도와드리는 AI 어시스턴트입니다.
@@ -200,7 +212,8 @@ def determine_next_step(state: Dict) -> str:
         has_dates = bool(conversation_state.get("travel_dates"))
         has_preferences = bool(conversation_state.get("preferences"))
         
-        has_plan = bool(plan_data.get("content"))
+        # plan_data 존재 여부 확인 - JSON 형식과 텍스트 형식 모두 지원
+        has_plan = bool(plan_data.get("content") or plan_data.get("plan_data"))
         
         last_user_message = None
         previous_ai_message = None
@@ -613,7 +626,7 @@ def refine_plan(llm, state: Dict) -> Dict:
     refined_metadata = {
         "generated_at": "refine_plan",
         "content": response.content,
-        "previous_plan": plan_data.get("content", ""),
+        "previous_plan": plan_data.get("content") or plan_data.get("plan_data", ""),
         "kakao_places_used": used_kakao_before or bool(additional_places_info),
         "refinement_enhanced": bool(additional_places_info)
     }
@@ -630,7 +643,8 @@ def register_calendar(llm, state: Dict) -> Dict:
     messages = state.get("messages", [])
     plan_data = state.get("plan_data", {})
     
-    if not plan_data.get("content"):
+    # plan_data 존재 여부 확인 - JSON 형식과 텍스트 형식 모두 지원
+    if not (plan_data.get("content") or plan_data.get("plan_data")):
         error_msg = "Google Calendar 등록에 필요한 여행 계획 정보가 없습니다. 먼저 여행 계획을 생성해주세요."
         response = AIMessage(content=error_msg)
         messages.append(response)

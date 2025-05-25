@@ -162,20 +162,44 @@ class TravelPlannerAgent:
             
             plan_data = {}
             if current_plan:
-                content = current_plan.get("content", "")
-                if content:
+                # JSON 형식 계획 처리
+                if current_plan.get("plan_data"):
                     plan_data = {
                         "generated_at": current_plan.get("generated_at", "client"),
-                        "content": content,
-                        "collected_info": current_plan.get("collected_info", "")
+                        "plan_data": current_plan.get("plan_data"),
+                        "collected_info": current_plan.get("collected_info", ""),
+                        "format": "json"
                     }
+                # 텍스트 형식 계획 처리
+                elif current_plan.get("content"):
+                    plan_data = {
+                        "generated_at": current_plan.get("generated_at", "client"),
+                        "content": current_plan.get("content"),
+                        "collected_info": current_plan.get("collected_info", ""),
+                        "format": "text"
+                    }
+            
+            # conversation_state를 메시지 히스토리와 user_preferences에서 복원
+            conversation_state = {}
+            if user_preferences:
+                # user_preferences에서 기본 정보 추출
+                travel_dates = user_preferences.get("travel_dates", {})
+                if travel_dates.get("start") and travel_dates.get("end"):
+                    conversation_state["travel_dates"] = f"{travel_dates['start']} ~ {travel_dates['end']}"
+                
+                conversation_state["destination"] = user_preferences.get("destination")
+                
+                preferences = user_preferences.get("preferences", {})
+                activities = preferences.get("activities", [])
+                if activities:
+                    conversation_state["preferences"] = activities
             
             initial_state = {
                 "messages": base_messages,
                 "current_step": str(ConversationState.CHECK_GUARDRAIL),
                 "plan_data": plan_data,
                 "required_info": {},
-                "conversation_state": {},
+                "conversation_state": conversation_state,
                 "calendar_data": {},
                 "memory_size": self.CONVERSATION_MEMORY_SIZE
             }

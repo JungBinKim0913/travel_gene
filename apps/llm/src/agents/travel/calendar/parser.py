@@ -57,6 +57,51 @@ def create_travel_event_summary(destination: str, plan_content: str) -> str:
 
 def extract_travel_info(plan_data: Dict) -> Dict:
     """여행 계획에서 기본 정보 추출"""
+    # JSON 형식 계획 처리
+    if plan_data.get("plan_data"):
+        json_plan = plan_data["plan_data"]
+        
+        # travel_overview에서 기본 정보 추출
+        if "travel_overview" in json_plan:
+            overview = json_plan["travel_overview"]
+            destination = overview.get("destination", "여행")
+            
+            # 날짜 정보 추출
+            start_date_str = overview.get("start_date")
+            end_date_str = overview.get("end_date")
+            
+            start_date = None
+            end_date = None
+            
+            if start_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+                except ValueError:
+                    pass
+            
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+                except ValueError:
+                    pass
+            
+            # 기본값 설정
+            if not start_date:
+                start_date = datetime.now()
+            if not end_date:
+                end_date = start_date + timedelta(days=DEFAULT_TRAVEL_DAYS)
+            
+            summary = overview.get("summary", f"{destination} 여행")
+            
+            return {
+                "destination": destination,
+                "start_date": start_date,
+                "end_date": end_date,
+                "summary": summary,
+                "description": summary
+            }
+    
+    # 기존 텍스트 형식 계획 처리 (하위 호환성)
     plan_content = plan_data.get("content", "")
     
     destination = extract_destination(plan_content)

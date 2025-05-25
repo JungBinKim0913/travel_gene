@@ -505,23 +505,8 @@ else:
         with st.chat_message(message["role"]):
             if message.get("plan_data"):
                 st.write(message["content"])
-                
-                tab1, tab2 = st.tabs(["📊 상세 데이터", "📝 상세 계획"])
-                
-                with tab1:
-                    st.json(message["plan_data"])
-                    
-                    json_str = json.dumps(message["plan_data"], ensure_ascii=False, indent=2)
-                    st.download_button(
-                        label="📥 JSON 파일 다운로드",
-                        data=json_str,
-                        file_name=f"travel_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json",
-                        key=f"download_json_{message.get('timestamp', 'default')}"
-                    )
-                
-                with tab2:
-                    render_json_plan_card({"plan_data": message["plan_data"]})
+                # JSON 데이터가 있는 경우 카드 형태로만 표시
+                render_json_plan_card({"plan_data": message["plan_data"]})
             else:
                 st.write(message["content"])
 
