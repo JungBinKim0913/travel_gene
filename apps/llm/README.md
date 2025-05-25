@@ -22,6 +22,10 @@ Travel Gene 애플리케이션의 LLM 백엔드 서비스입니다.
 pip install -r requirements.txt
 ```
 
+```bash
+pip3 install -r requirements.txt
+```
+
 2. 환경변수 설정:
 `.env` 파일을 생성하고 다음 변수들을 설정하세요:
 

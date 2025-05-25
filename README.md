@@ -125,3 +125,9 @@ LLM Application Library를 선택했으니, 가장 잘 맞는 프레임워크를
 
 
 ## 🪔 실행 방법
+
+1. LLM 서비스 
+  apps/llm 이동 후 README.md 확인
+
+2. client
+  apps/client 이동 후 README.md 확인
