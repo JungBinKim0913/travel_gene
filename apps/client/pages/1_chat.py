@@ -461,7 +461,7 @@ def process_ai_response():
                 "Accept": "text/event-stream"
             }
             
-            with thinking_msg.status("🤔 맞춤형 여행을 위해 트래블 지니는 생각 중...") as status:
+            with thinking_msg.status("🤔 맞춤형 여행을 위해 트래블 지니는 생각 중~") as status:
                 status.write("여행 계획을 세우고 있습니다...")
                 
                 try:
