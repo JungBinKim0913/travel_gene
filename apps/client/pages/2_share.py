@@ -78,17 +78,10 @@ if shared_plan:
     st.markdown("---")
     render_share_options(shared_plan)
     
-    st.markdown("---")
-    with st.expander("🔍 계획 데이터 확인 (디버깅용)", expanded=False):
-        st.json(shared_plan)
-
 elif 'current_plan' in st.session_state and st.session_state.current_plan:
     plan = st.session_state.current_plan
     
     st.info("💡 채팅에서 생성한 여행 계획이 있습니다!")
-    
-    with st.expander("🔍 계획 데이터 확인 (디버깅용)", expanded=False):
-        st.json(plan)
     
     if 'plan_data' in plan and isinstance(plan['plan_data'], dict):
         plan_data = plan['plan_data']

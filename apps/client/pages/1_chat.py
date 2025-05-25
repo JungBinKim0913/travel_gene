@@ -503,7 +503,27 @@ if not st.session_state.chat_history:
 else:
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
-            st.write(message["content"])
+            if message.get("plan_data"):
+                st.write(message["content"])
+                
+                tab1, tab2 = st.tabs(["📊 상세 데이터", "📝 상세 계획"])
+                
+                with tab1:
+                    st.json(message["plan_data"])
+                    
+                    json_str = json.dumps(message["plan_data"], ensure_ascii=False, indent=2)
+                    st.download_button(
+                        label="📥 JSON 파일 다운로드",
+                        data=json_str,
+                        file_name=f"travel_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        key=f"download_json_{message.get('timestamp', 'default')}"
+                    )
+                
+                with tab2:
+                    render_json_plan_card({"plan_data": message["plan_data"]})
+            else:
+                st.write(message["content"])
 
 if st.session_state.current_plan:
     st.markdown("---")
@@ -557,6 +577,9 @@ def process_ai_response():
         full_response = ""
         has_error = False
         plan_completed = False 
+        json_plan_data = None
+        is_json_response = False
+        json_container = None
         
         try:
             headers = {
@@ -616,7 +639,54 @@ def process_ai_response():
                                         
                                         if 'response' in data:
                                             full_response += data['response']
-                                            message_placeholder.markdown(full_response)
+                                            
+                                            # JSON 응답 시작 감지 (첫 번째 { 문자)
+                                            if not is_json_response and full_response.strip().startswith('{'):
+                                                is_json_response = True
+                                                status.write("JSON 여행 계획을 생성하고 있습니다...")
+                                                
+                                                # JSON 뷰어 컨테이너 미리 생성
+                                                message_placeholder.empty()
+                                                json_container = message_placeholder.container()
+                                            
+                                            if is_json_response:
+                                                # JSON 응답인 경우 - 파싱 시도
+                                                try:
+                                                    # 완전한 JSON인지 확인
+                                                    if full_response.strip().endswith('}'):
+                                                        json_plan_data = json.loads(full_response.strip())
+                                                        
+                                                        # 완전한 JSON이 파싱되면 최종 뷰어 표시
+                                                        with json_container:
+                                                            st.markdown("### 🎉 여행 계획이 완성되었습니다!")
+                                                            
+                                                            # JSON 에디터/뷰어 탭 생성
+                                                            tab1, tab2 = st.tabs(["📊 JSON 뷰어", "📝 상세 계획"])
+                                                            
+                                                            with tab1:
+                                                                st.json(json_plan_data)
+                                                                
+                                                                # JSON 다운로드 버튼
+                                                                json_str = json.dumps(json_plan_data, ensure_ascii=False, indent=2)
+                                                                st.download_button(
+                                                                    label="📥 JSON 파일 다운로드",
+                                                                    data=json_str,
+                                                                    file_name=f"travel_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                                                    mime="application/json"
+                                                                )
+                                                            
+                                                            with tab2:
+                                                                # 기존 카드 형태로 렌더링
+                                                                render_json_plan_card({"plan_data": json_plan_data})
+                                                except json.JSONDecodeError:
+                                                    # JSON 파싱 실패 - 계속 진행 상태 표시
+                                                    if json_container:
+                                                        with json_container:
+                                                            st.markdown("### 🎉 여행 계획 생성 중...")
+                                            else:
+                                                # 일반 텍스트 응답
+                                                message_placeholder.markdown(full_response)
+                                            
                                             status.write("응답을 작성하고 있습니다...")
                                         
                                         if 'has_plan' in data and data['has_plan']:
@@ -626,9 +696,13 @@ def process_ai_response():
                                             if isinstance(plan_data, dict) and 'plan_data' in plan_data:
                                                 # 이미 JSON 구조로 되어있는 경우
                                                 st.session_state.current_plan = plan_data
+                                                if not json_plan_data:
+                                                    json_plan_data = plan_data.get('plan_data', {})
                                             elif isinstance(plan_data, dict) and 'format' in plan_data and plan_data['format'] == 'json':
                                                 # JSON 형식으로 표시된 경우
                                                 st.session_state.current_plan = plan_data
+                                                if not json_plan_data:
+                                                    json_plan_data = plan_data.get('plan_data', {})
                                             else:
                                                 # 기존 텍스트 형식 또는 기타 형식
                                                 st.session_state.current_plan = plan_data
@@ -645,22 +719,38 @@ def process_ai_response():
                                         break
                         
                         if full_response and not has_error:
-                            if full_response.strip().startswith('{') and full_response.strip().endswith('}'):
+                            # 최종 응답 처리
+                            if json_plan_data:
+                                # JSON 계획이 있는 경우
+                                user_friendly_message = "✨ 맞춤형 여행 계획을 생성했습니다! 위의 JSON 데이터에서 자세한 일정을 확인해보세요."
+                                
+                                st.session_state.chat_history.append({
+                                    "role": "assistant",
+                                    "content": user_friendly_message,
+                                    "plan_data": json_plan_data  # JSON 데이터도 함께 저장
+                                })
+                                
+                            elif is_json_response and full_response.strip().startswith('{') and full_response.strip().endswith('}'):
                                 try:
-                                    json.loads(full_response.strip())
-                                    user_friendly_message = "✨ 맞춤형 여행 계획을 생성했습니다! 아래에서 자세한 일정을 확인해보세요."
-                                    message_placeholder.markdown(user_friendly_message)
+                                    # 응답 자체가 JSON인 경우 (위에서 파싱 안된 경우)
+                                    parsed_json = json.loads(full_response.strip())
+                                    
+                                    user_friendly_message = "✨ 맞춤형 여행 계획을 생성했습니다! 위의 JSON 데이터에서 자세한 일정을 확인해보세요."
                                     
                                     st.session_state.chat_history.append({
                                         "role": "assistant",
-                                        "content": user_friendly_message
+                                        "content": user_friendly_message,
+                                        "plan_data": parsed_json  # JSON 데이터도 함께 저장
                                     })
+                                    
                                 except json.JSONDecodeError:
+                                    # JSON 파싱 실패시 일반 텍스트로 처리
                                     st.session_state.chat_history.append({
                                         "role": "assistant",
                                         "content": full_response
                                     })
                             else:
+                                # 일반 텍스트 응답
                                 st.session_state.chat_history.append({
                                     "role": "assistant",
                                     "content": full_response
