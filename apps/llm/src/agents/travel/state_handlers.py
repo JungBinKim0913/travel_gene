@@ -10,8 +10,57 @@ from .calendar import (
 
 from .types import ConversationState
 from .utils import select_next_question, create_context_message, analyze_preferences, analyze_user_intent
+from .guardrail import check_content_safety
 from ...utils.openai_utils import analyze_conversation_with_json_structure
 from ...utils.kakao_map_api import get_kakao_map_api
+
+def check_guardrail(llm, state: Dict) -> Dict:
+    """보안 및 안전성 검사"""
+    try:
+        messages = state.get("messages", [])
+        
+        if not messages:
+            return {
+                **state,
+                "current_step": str(ConversationState.UNDERSTAND_REQUEST)
+            }
+        
+        last_user_message = None
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                last_user_message = msg.content
+                break
+        
+        if not last_user_message:
+            return {
+                **state,
+                "current_step": str(ConversationState.UNDERSTAND_REQUEST)
+            }
+        
+        safety_check = check_content_safety(llm, last_user_message)
+        
+        if not safety_check["is_safe"]:
+            response = AIMessage(content=safety_check["warning_message"])
+            messages.append(response)
+            
+            return {
+                **state,
+                "messages": messages,
+                "current_step": str(ConversationState.END),
+                "guardrail_violation": safety_check["violation_type"]
+            }
+        
+        return {
+            **state,
+            "current_step": str(ConversationState.UNDERSTAND_REQUEST)
+        }
+        
+    except Exception as e:
+        print(f"Error in check_guardrail: {str(e)}")
+        return {
+            **state,
+            "current_step": str(ConversationState.UNDERSTAND_REQUEST)
+        } 
 
 def understand_request(llm, state: Dict) -> Dict:
     """사용자 요청 이해"""
@@ -669,4 +718,4 @@ def delete_calendar(llm, state: Dict) -> Dict:
         "messages": messages,
         "current_step": str(ConversationState.DELETE_CALENDAR),
         "calendar_data": result["calendar_data"]
-    } 
+    }

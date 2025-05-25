@@ -5,6 +5,7 @@ from langgraph.store.memory import InMemoryStore
 
 from .types import ConversationState, TravelPlannerState
 from .state_handlers import (
+    check_guardrail,
     understand_request, 
     determine_next_step, 
     ask_destination, 
@@ -34,6 +35,8 @@ class TravelPlannerAgent:
         """대화 워크플로우 생성"""
         workflow = StateGraph(TravelPlannerState)
         
+        workflow.add_node(str(ConversationState.CHECK_GUARDRAIL), 
+                         lambda state: check_guardrail(self.llm, state))
         workflow.add_node(str(ConversationState.UNDERSTAND_REQUEST), 
                          lambda state: understand_request(self.llm, state))
         workflow.add_node(str(ConversationState.GENERATE_PLAN), 
@@ -53,7 +56,16 @@ class TravelPlannerAgent:
         workflow.add_node(str(ConversationState.DELETE_CALENDAR), 
                          lambda state: delete_calendar(self.llm, state))
         
-        workflow.set_entry_point(str(ConversationState.UNDERSTAND_REQUEST))
+        workflow.set_entry_point(str(ConversationState.CHECK_GUARDRAIL))
+
+        workflow.add_conditional_edges(
+            str(ConversationState.CHECK_GUARDRAIL),
+            lambda state: state.get("current_step", str(ConversationState.END)),
+            {
+                str(ConversationState.UNDERSTAND_REQUEST): str(ConversationState.UNDERSTAND_REQUEST),
+                str(ConversationState.END): END
+            }
+        )
 
         workflow.add_conditional_edges(
             str(ConversationState.UNDERSTAND_REQUEST),
@@ -160,7 +172,7 @@ class TravelPlannerAgent:
             
             initial_state = {
                 "messages": base_messages,
-                "current_step": str(ConversationState.UNDERSTAND_REQUEST),
+                "current_step": str(ConversationState.CHECK_GUARDRAIL),
                 "plan_data": plan_data,
                 "required_info": {},
                 "conversation_state": {},
